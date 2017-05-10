@@ -45,6 +45,7 @@ struct osd_com_ctx;
  */
 struct osd_com_client;
 
+const struct osd_version * osd_com_get_version(void);
 
 osd_result osd_com_new(struct osd_com_ctx **ctx);
 

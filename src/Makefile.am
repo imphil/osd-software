@@ -1,1 +1,1 @@
-SUBDIRS = com tools
+SUBDIRS = libosd tools

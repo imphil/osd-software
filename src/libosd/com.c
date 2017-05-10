@@ -18,6 +18,7 @@
  */
 
 #include <osd.h>
+#include "osd-private.h"
 #include <osd-com.h>
 #include "osd-com-private.h"
 
@@ -30,7 +31,6 @@ static osd_result _osd_com_enumerate_modules(struct osd_com_ctx *ctx)
 {
     return OSD_RV_SUCCESS;
 }
-
 
 /**
  * Create new communication API object

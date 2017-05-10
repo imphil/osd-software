@@ -30,7 +30,7 @@ AC_DEFINE([OSD_VERSION_MICRO], [OSD_VERSION_MICRO_], "OSD micro version")
 AC_DEFINE([OSD_VERSION_SUFFIX], ["OSD_VERSION_SUFFIX_"], "OSD version suffix")
 
 
-AC_CONFIG_SRCDIR([src/com/include/osd-com.h])
+AC_CONFIG_SRCDIR([src/libosd/include/osd.h])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([check-news foreign 1.11 -Wall -Wno-portability silent-rules \
                   tar-pax no-dist-gzip dist-xz subdir-objects])
@@ -140,8 +140,7 @@ AC_CONFIG_HEADERS(config.h)
 AC_CONFIG_FILES([
         Makefile
         src/Makefile
-        src/common/Makefile
-        src/com/Makefile
+        src/libosd/Makefile
         src/tools/Makefile
         src/tools/osd-daemon/Makefile
 ])
