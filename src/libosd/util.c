@@ -10,7 +10,7 @@ static const struct osd_version osd_version_internal = {OSD_VERSION_MAJOR,
  * @return the library version information
  */
 API_EXPORT
-const struct osd_version * osd_get_version(void)
+const struct osd_version * osd_version_get(void)
 {
     return &osd_version_internal;
 }

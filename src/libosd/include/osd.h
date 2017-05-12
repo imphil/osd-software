@@ -1,5 +1,5 @@
 /**
- * Open SoC Debug common functionality (header-only)
+ * Open SoC Debug Library (common parts)
  *
  * Data structures and functionality used across the layers of Open SoC Debug.
  */
@@ -7,6 +7,8 @@
 
 #include <inttypes.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <syslog.h>
 
 #pragma once
 
@@ -41,11 +43,13 @@ typedef void (*osd_log_fn)(struct osd_log_ctx *ctx,
                            int line, const char *fn,
                            const char *format, va_list args);
 
-osd_result osd_log_new(struct osd_log_ctx **ctx);
+osd_result osd_log_new(struct osd_log_ctx **ctx,
+                       int log_priority,
+                       osd_log_fn log_fn);
 void osd_log_free(struct osd_log_ctx *ctx);
-void osd_set_log_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn);
-osd_result osd_get_log_priority(struct osd_log_ctx *ctx);
-void osd_set_log_priority(struct osd_log_ctx *ctx, int priority);
+void osd_log_set_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn);
+osd_result osd_log_get_priority(struct osd_log_ctx *ctx);
+void osd_log_set_priority(struct osd_log_ctx *ctx, int priority);
 
 
 /**
@@ -90,7 +94,7 @@ struct osd_module_desc {
     uint16_t version; //!< Module version
 };
 
-const struct osd_version * osd_get_version(void);
+const struct osd_version * osd_version_get(void);
 
 #ifdef __cplusplus
 }

@@ -38,12 +38,14 @@ static osd_result _osd_com_enumerate_modules(struct osd_com_ctx *ctx)
  * @return OSD_RV_SUCCESS on success, any other value indicates an error
  */
 API_EXPORT
-osd_result osd_com_new(struct osd_com_ctx **ctx)
+osd_result osd_com_new(struct osd_com_ctx **ctx, struct osd_log_ctx *log_ctx)
 {
     struct osd_com_ctx *c = calloc(1, sizeof(struct osd_com_ctx));
     if (!c) {
         return -ENOMEM;
     }
+
+    c->log_ctx = log_ctx;
 
     *ctx = c;
 

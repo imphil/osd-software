@@ -24,6 +24,8 @@
  *   Philipp Wagner <philipp.wagner@tum.de>
  */
 
+#include <osd.h>
+
 #include <stdlib.h>
 
 #pragma once
@@ -45,9 +47,7 @@ struct osd_com_ctx;
  */
 struct osd_com_client;
 
-const struct osd_version * osd_com_get_version(void);
-
-osd_result osd_com_new(struct osd_com_ctx **ctx);
+osd_result osd_com_new(struct osd_com_ctx **ctx, struct osd_log_ctx *log_ctx);
 
 void osd_com_free(struct osd_com_ctx *ctx);
 

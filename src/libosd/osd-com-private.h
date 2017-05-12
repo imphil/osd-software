@@ -3,6 +3,7 @@
 #pragma once
 
 struct osd_com_ctx {
+    struct osd_log_ctx *log_ctx;
     struct osd_system_info *system_info;
     struct osd_module_desc *modules;
     size_t modules_len;

@@ -7,5 +7,6 @@ osd_daemon_LDFLAGS = $(AM_LDFLAGS) \
 
 osd_daemon_CFLAGS = $(AM_CFLAGS) \
 	-I$(top_srcdir)/src/libosd/include \
+	-include $(top_builddir)/config.h \
 	${libglip_CFLAGS}
 osd_daemon_SOURCES = osd-daemon.c

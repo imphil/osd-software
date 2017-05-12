@@ -2,6 +2,13 @@
 
 #pragma once
 
+/*
+ * Mark functions to be exported from the library as part of the API
+ *
+ * We set compiler options to mark all functions as hidden by default, causing
+ * them to be private to the library. If a function is part of the API, you
+ * must explicitly mark it with this makro.
+ */
 #define API_EXPORT __attribute__ ((visibility("default")))
 
 static inline void __attribute__((always_inline, format(printf, 2, 3)))

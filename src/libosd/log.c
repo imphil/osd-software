@@ -27,6 +27,10 @@
 #include <osd.h>
 #include "osd-private.h"
 
+#include <syslog.h>
+#include <stdlib.h>
+#include <errno.h>
+
 /**
  * Logging context
  */
@@ -71,6 +75,33 @@ void osd_log(struct osd_log_ctx *ctx,
 }
 
 /**
+ * Create a new instance of osd_log_ctx
+ *
+ * @param ctx the logging context
+ * @param log_priority filter: only log messages greater or equal the given
+ *                     priority. Use on the LOG_* constants in stdlog.h
+ * @param log_fn logging callback
+ *
+ * @see osd_log_set_priority()
+ * @see osd_log_set_fn()
+ */
+osd_result osd_log_new(struct osd_log_ctx **ctx, int log_priority,
+                       osd_log_fn log_fn)
+{
+    struct osd_log_ctx *c;
+
+    c = calloc(1, sizeof(struct osd_log_ctx));
+    if (!c)
+        return -ENOMEM;
+
+    c->log_fn = log_fn;
+    c->log_priority = log_priority;
+
+    *ctx = c;
+    return OSD_RV_SUCCESS;
+}
+
+/**
  * Set logging function
  *
  * The built-in logging writes to STDERR. It can be overridden by a custom
@@ -96,7 +127,7 @@ void osd_log(struct osd_log_ctx *ctx,
  * {
  *   // ...
  *   osd_set_caller_ctx(gctx, this);
- *   osd_set_log_fn(&MyClass::osdLogCallback);
+ *   osd_log_set_fn(&MyClass::osdLogCallback);
  *   // ...
  * }
  *
@@ -114,7 +145,7 @@ void osd_log(struct osd_log_ctx *ctx,
  * @ingroup log
  */
 API_EXPORT
-void osd_set_log_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn)
+void osd_log_set_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn)
 {
     ctx->log_fn = log_fn;
 }
@@ -127,12 +158,12 @@ void osd_set_log_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn)
  * @param ctx the library context
  * @return the log priority
  *
- * @see osd_set_log_priority()
+ * @see osd_log_set_priority()
  *
  * @ingroup log
  */
 API_EXPORT
-int osd_get_log_priority(struct osd_log_ctx *ctx)
+int osd_log_get_priority(struct osd_log_ctx *ctx)
 {
     return ctx->log_priority;
 }
@@ -153,12 +184,12 @@ int osd_get_log_priority(struct osd_log_ctx *ctx)
  * @param ctx       the library context
  * @param priority  new priority value
  *
- * @see osd_get_log_priority()
+ * @see osd_log_get_priority()
  *
  * @ingroup log
  */
 API_EXPORT
-void osd_set_log_priority(struct osd_log_ctx *ctx, int priority)
+void osd_log_set_priority(struct osd_log_ctx *ctx, int priority)
 {
     ctx->log_priority = priority;
 }

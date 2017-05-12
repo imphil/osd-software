@@ -112,7 +112,6 @@ AM_CFLAGS="-Wall \
     -Wsign-compare -Wchar-subscripts \
     -Wstrict-prototypes -Wshadow \
     -Wformat-security -Wtype-limits \
-    -fvisibility=hidden \
     -ffunction-sections \
     -fdata-sections \
     -pthread"
