@@ -26,7 +26,7 @@ CLEANFILES =
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
 AM_MAKEFLAGS = --no-print-directory
 
-SUBDIRS = src . tests
+SUBDIRS = src tests
 
 # prepare pkg-config file
 SED_PROCESS = \
@@ -38,7 +38,7 @@ SED_PROCESS = \
     -e 's,@includedir\@,$(includedir),g' \
     < $< > $@ || rm $@
 
-%.pc: %.pc.in Makefile
+%.pc: %.pc.in
 	$(SED_PROCESS)
 
 .PHONY: doc
@@ -58,6 +58,11 @@ check-code-coverage:
 else
 	@echo Run configure with --enable-code-coverage for coverage support.
 endif
+
+# The current directory must be listed *after* the doc directory to make sure
+# 'make distclean' doesn't delete doc/Makefile before 'make distclean -C doc'
+# had a chance to run.
+SUBDIRS += .
 
 pkgconfigdir = $(datadir)/pkgconfig
 pkgconfig_DATA = osd.pc
