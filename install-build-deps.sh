@@ -10,8 +10,8 @@ case $(lsb_release -is) in
   *SUSE*)
     sudo zypper install \
       libcheck0 check-devel \
-      doxygen \
-      gcov lcov
+      doxygen python3 python3-pip \
+      lcov
     ;;
 
   *)
