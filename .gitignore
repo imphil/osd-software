@@ -12,3 +12,4 @@ build-aux
 config.h.in
 .autotools
 config.log
+__pycache__
