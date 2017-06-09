@@ -1,0 +1,18 @@
+language: c
+
+sudo: false
+
+before_install:
+  - ./install-build-deps.sh
+
+script:
+  - ./autogen.sh
+  - mkdir build
+  - cd build
+  - ../configure --enable-code-coverage --disable-daemon
+  - make
+  - make check
+
+#after_success:
+  # upload code coverage data
+  #- bash <(curl -s https://codecov.io/bash)
