@@ -24,7 +24,7 @@
  *   Philipp Wagner <philipp.wagner@tum.de>
  */
 
-#include <osd.h>
+#include <osd/osd.h>
 
 #include <stdlib.h>
 
@@ -35,6 +35,16 @@ extern "C" {
 #endif
 
 /**
+ * Request non-blocking operation
+ */
+#define OSD_COM_NONBLOCK 0x400
+
+enum osd_com_byte_order{
+    OSD_COM_BIG_ENDIAN,
+    OSD_COM_LITTLE_ENDIAN
+};
+
+/**
  * Opaque context object
  *
  * This object contains all state information. Create and initialize a new
@@ -43,19 +53,56 @@ extern "C" {
 struct osd_com_ctx;
 
 /**
+ * Function template: write data to the device
+ *
+ * @see struct osd_com_device_if
+ */
+typedef ssize_t (*osd_com_device_write_fn)(uint16_t *buf, size_t size, int flags);
+
+/**
+ * Function template: read data from the device
+ *
+ * @see struct osd_com_device_if
+ */
+typedef ssize_t (*osd_com_device_read_fn)(uint16_t *buf, size_t size, int flags);
+
+
+/**
+ * Read/write interface of a device
+ */
+struct osd_com_device_if {
+    osd_com_device_write_fn write;
+    osd_com_device_read_fn read;
+};
+
+#if 0
+/**
  * Client talking to the osd-com library
  */
 struct osd_com_client;
+#endif
 
 osd_result osd_com_new(struct osd_com_ctx **ctx, struct osd_log_ctx *log_ctx);
 
 void osd_com_free(struct osd_com_ctx *ctx);
 
-/**
- * Get all OSD modules available in the connected device
- */
-osd_result osd_com_get_modules(struct osd_com_ctx *ctx, struct osd_module_desc **modules, size_t *modules_len);
+osd_result osd_com_get_modules(struct osd_com_ctx *ctx,
+                               struct osd_module_desc **modules,
+                               size_t *modules_len);
 
+osd_result osd_com_set_device_ctrl_if(struct osd_com_ctx *ctx,
+                                      struct osd_com_device_if *event_if);
+osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
+                                       struct osd_com_device_if *event_if);
+
+osd_result osd_com_connect(struct osd_com_ctx *ctx);
+osd_result osd_com_disconnect(struct osd_com_ctx *ctx);
+
+osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
+                            const unsigned int module_addr,
+                            const uint16_t reg_addr,
+                            const int reg_size_bit, void *result,
+                            const int flags);
 
 #if 0
 
@@ -101,9 +148,6 @@ osd_result osd_com_register_event_receiver(struct osd_com_ctx *ctx, struct osd_c
 osd_result osd_com_release_module(struct osd_com_ctx *ctx, unsigned int module_id)
 
 
-// API to the lower layers; drivers
-osd_result osd_com_register_write_func();
-osd_result osd_com_register_read_func();
 
 #endif
 

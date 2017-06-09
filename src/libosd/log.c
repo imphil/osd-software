@@ -24,12 +24,18 @@
  *   Philipp Wagner <philipp.wagner@tum.de>
  */
 
-#include <osd.h>
+#include <osd/osd.h>
 #include "osd-private.h"
 
+#include <assert.h>
 #include <syslog.h>
 #include <stdlib.h>
 #include <errno.h>
+
+/**
+ * Default log priority if not set otherwise
+ */
+#define LOG_PRIORITY_DEFAULT LOG_ERR
 
 /**
  * Logging context
@@ -39,6 +45,8 @@ struct osd_log_ctx {
     osd_log_fn log_fn;
     /** logging priority */
     int log_priority;
+    /** caller context */
+    void* caller_ctx;
 };
 
 /**
@@ -51,7 +59,7 @@ struct osd_log_ctx {
  * instead, which fill in all details for you (e.g. file name, line number,
  * etc.).
  *
- * @param ctx      the library context
+ * @param ctx      the log context
  * @param priority the priority of the log message
  * @param file     the file the log message originates from (use __FILE__)
  * @param line     the line number the message originates from
@@ -69,6 +77,10 @@ void osd_log(struct osd_log_ctx *ctx,
 {
     va_list args;
 
+    if (!ctx->log_fn) {
+        return;
+    }
+
     va_start(args, format);
     ctx->log_fn(ctx, priority, file, line, fn, format, args);
     va_end(args);
@@ -80,25 +92,43 @@ void osd_log(struct osd_log_ctx *ctx,
  * @param ctx the logging context
  * @param log_priority filter: only log messages greater or equal the given
  *                     priority. Use on the LOG_* constants in stdlog.h
- * @param log_fn logging callback
+ * @param log_fn logging callback. Set to NULL to disable logging output.
  *
  * @see osd_log_set_priority()
  * @see osd_log_set_fn()
  */
-osd_result osd_log_new(struct osd_log_ctx **ctx, int log_priority,
+API_EXPORT
+osd_result osd_log_new(struct osd_log_ctx **ctx, const int log_priority,
                        osd_log_fn log_fn)
 {
     struct osd_log_ctx *c;
 
     c = calloc(1, sizeof(struct osd_log_ctx));
-    if (!c)
-        return -ENOMEM;
+    assert(c);
 
     c->log_fn = log_fn;
-    c->log_priority = log_priority;
+
+    if (!log_priority) {
+        c->log_priority = LOG_PRIORITY_DEFAULT;
+    } else {
+        c->log_priority = log_priority;
+    }
 
     *ctx = c;
-    return OSD_RV_SUCCESS;
+    return OSD_OK;
+}
+
+/**
+ * Free an osd_log_ctx object
+ *
+ * Don't use the @p ctx pointer any more after calling this function.
+ *
+ * @param ctx    the log context
+ */
+API_EXPORT
+void osd_log_free(struct osd_log_ctx *ctx)
+{
+    free(ctx);
 }
 
 /**
@@ -109,8 +139,8 @@ osd_result osd_log_new(struct osd_log_ctx **ctx, int log_priority,
  *
  * In many cases you want the log message to be associated with a context or
  * object of your application, i.e. the object that uses OSD. In this
- * case, set the context or <code>this</code> pointer with osd_set_caller_ctx()
- * and retrieve it inside your @p log_fn.
+ * case, set the context or <code>this</code> pointer with
+ * osd_log_set_caller_ctx() and retrieve it inside your @p log_fn.
  *
  * An example in C++ could look like this:
  * @code{.cpp}
@@ -126,7 +156,7 @@ osd_result osd_log_new(struct osd_log_ctx **ctx, int log_priority,
  * MyClass::MyClass()
  * {
  *   // ...
- *   osd_set_caller_ctx(gctx, this);
+ *   osd_log_set_caller_ctx(gctx, this);
  *   osd_log_set_fn(&MyClass::osdLogCallback);
  *   // ...
  * }
@@ -139,10 +169,8 @@ osd_result osd_log_new(struct osd_log_ctx **ctx, int log_priority,
  * @endcode
  *
  *
- * @param ctx    the library context
+ * @param ctx    the log context
  * @param log_fn the used logging function
- *
- * @ingroup log
  */
 API_EXPORT
 void osd_log_set_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn)
@@ -155,12 +183,10 @@ void osd_log_set_fn(struct osd_log_ctx *ctx, osd_log_fn log_fn)
  *
  * The logging priority is the lowest message type that is reported.
  *
- * @param ctx the library context
+ * @param ctx the log context
  * @return the log priority
  *
  * @see osd_log_set_priority()
- *
- * @ingroup log
  */
 API_EXPORT
 int osd_log_get_priority(struct osd_log_ctx *ctx)
@@ -181,15 +207,45 @@ int osd_log_get_priority(struct osd_log_ctx *ctx)
  * all error and info messages to be shown, and all debug messages to be
  * discarded.
  *
- * @param ctx       the library context
+ * @param ctx       the log context
  * @param priority  new priority value
  *
  * @see osd_log_get_priority()
- *
- * @ingroup log
  */
 API_EXPORT
 void osd_log_set_priority(struct osd_log_ctx *ctx, int priority)
 {
     ctx->log_priority = priority;
+}
+
+/**
+ * Set a caller context pointer
+ *
+ * This library does not use this pointer in any way, you're free to set it to
+ * whatever your application needs.
+ *
+ * @param ctx        the log context
+ * @param caller_ctx the caller context pointer
+ *
+ * @see osd_log_get_caller_ctx()
+ * @see osd_log_set_fn() for a code example using this functionality
+ */
+API_EXPORT
+void osd_log_set_caller_ctx(struct osd_log_ctx *ctx, void *caller_ctx)
+{
+    ctx->caller_ctx = caller_ctx;
+}
+
+/**
+ * Get the caller context pointer
+ *
+ * @param ctx the log context
+ * @return the caller context pointer
+ *
+ * @see osd_log_set_caller_ctx()
+ */
+API_EXPORT
+void* osd_log_get_caller_ctx(struct osd_log_ctx *ctx)
+{
+    return ctx->caller_ctx;
 }

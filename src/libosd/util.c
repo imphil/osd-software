@@ -1,4 +1,4 @@
-#include <osd.h>
+#include <osd/osd.h>
 #include "osd-private.h"
 
 static const struct osd_version osd_version_internal = {OSD_VERSION_MAJOR,

@@ -30,7 +30,7 @@ AC_DEFINE([OSD_VERSION_MICRO], [OSD_VERSION_MICRO_], "OSD micro version")
 AC_DEFINE([OSD_VERSION_SUFFIX], ["OSD_VERSION_SUFFIX_"], "OSD version suffix")
 
 
-AC_CONFIG_SRCDIR([src/libosd/include/osd.h])
+AC_CONFIG_SRCDIR([src/libosd/include/osd/osd.h])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([check-news foreign 1.11 -Wall -Wno-portability silent-rules \
                   tar-pax no-dist-gzip dist-xz subdir-objects])
@@ -45,6 +45,12 @@ AC_PREFIX_DEFAULT([/usr])
 
 AC_PROG_SED
 AC_PROG_MKDIR_P
+
+# check unit testing framework
+PKG_CHECK_MODULES([CHECK], [check >= 0.10.0])
+
+# test coverage with gcov and reporting with lcov
+AX_CODE_COVERAGE
 
 AC_ARG_ENABLE([logging],
     AS_HELP_STRING([--disable-logging], [disable system logging @<:@default=enabled@:>@]),
@@ -114,13 +120,15 @@ AM_CFLAGS="-Wall \
     -Wformat-security -Wtype-limits \
     -ffunction-sections \
     -fdata-sections \
-    -pthread"
+    -pthread \
+    $CODE_COVERAGE_CFLAGS"
 AC_SUBST([AM_CFLAGS])
 
 AM_LDFLAGS="-Wl,--gc-sections \
     -Wl,--as-needed \
     -pthread \
-    -lrt"
+    -lrt \
+    $CODE_COVERAGE_LIBS"
 AC_SUBST(AM_LDFLAGS)
 
 dnl ----- DOCUMENTATION -----
@@ -142,6 +150,8 @@ AC_CONFIG_FILES([
         src/libosd/Makefile
         src/tools/Makefile
         src/tools/osd-daemon/Makefile
+        tests/Makefile
+        tests/unit/Makefile
 ])
 
 AC_OUTPUT

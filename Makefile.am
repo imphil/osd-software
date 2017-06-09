@@ -27,7 +27,7 @@ CLEANFILES =
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
 AM_MAKEFLAGS = --no-print-directory
 
-SUBDIRS = src
+SUBDIRS = src . tests
 
 # prepare pkg-config file
 SED_PROCESS = \

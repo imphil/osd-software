@@ -2,13 +2,15 @@
  * Open SoC Debug Communication Daemon
  */
 
-#include <osd.h>
-#include <osd-com.h>
+#include <osd/osd.h>
+#include <osd/com.h>
+
 #include <libglip.h>
 #include <stdlib.h>
 #include <argp.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <byteswap.h>
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -196,6 +198,86 @@ static void glip_log_handler(struct glip_ctx *ctx, int priority,
     cli_vlog(priority, "libglip", format, args);
 }
 
+static ssize_t device_write(uint16_t *buf, size_t size_words, int flags)
+{
+    size_t bytes_written;
+    int rv;
+
+    // GLIP and OSD are big endian, |buf| is in native endianness
+    uint16_t *buf_be;
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    buf_be = malloc(size_words * sizeof(uint16_t));
+    if (!buf_be) {
+        return -1;
+    }
+
+    for (size_t w = 0; w < size_words; w++) {
+        buf_be[w] = bswap_16(buf[w]);
+    }
+#else
+    buf_be = buf;
+#endif
+
+    if (flags & OSD_COM_NONBLOCK) {
+        rv = glip_write(glip_ctx, 0, size_words * sizeof(uint16_t), (uint8_t*)buf_be,
+                        &bytes_written);
+    } else {
+        rv = glip_write_b(glip_ctx, 0, size_words * sizeof(uint16_t), (uint8_t*)buf_be,
+                          &bytes_written, 0 /* timeout [ms]; 0 == never */);
+    }
+    if (rv != 0) {
+        return -1;
+    }
+
+    size_t words_written = bytes_written / sizeof(uint16_t);
+    return words_written;
+}
+
+static ssize_t device_read(uint16_t *buf, size_t size_words, int flags)
+{
+    int rv;
+    size_t words_read;
+    size_t bytes_read;
+
+    uint16_t *buf_be;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    buf_be = malloc(size_words * sizeof(uint16_t));
+    if (!buf_be) {
+        return -1;
+    }
+#else
+    buf_be = buf;
+#endif
+
+    if (flags & OSD_COM_NONBLOCK) {
+        rv = glip_read(glip_ctx, 0,
+                       size_words * sizeof(uint16_t), (uint8_t*)buf_be,
+                       &bytes_read);
+    } else {
+        rv = glip_read_b(glip_ctx, 0,
+                         size_words * sizeof(uint16_t), (uint8_t*)buf_be,
+                         &bytes_read, 0 /* timeout [ms]; 0 == never */);
+    }
+    if (rv != 0) {
+        return -1;
+    }
+    words_read = bytes_read / sizeof(uint16_t);
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    for (size_t w = 0; w < words_read; w++) {
+        buf[w] = bswap_16(buf_be[w]);
+    }
+#endif
+
+    return words_read;
+}
+
+static struct osd_com_device_if device_communication_functions = {
+    .write = &device_write,
+    .read = &device_read
+};
+
 /**
  * Initialize OSD Communication Library
  */
@@ -221,6 +303,11 @@ static void init_osd_com(void)
     if (OSD_FAILED(osd_rv)) {
         fatal("Unable to create osd_com_ctx (rv=%d).\n", osd_rv);
     }
+
+    // connect the device read/write functions to the OSD communication API
+    // for now we use the same device connection for control and event data
+    osd_com_set_device_ctrl_if(osd_com_ctx, &device_communication_functions);
+    osd_com_set_device_event_if(osd_com_ctx, &device_communication_functions);
 }
 
 /**
@@ -238,6 +325,11 @@ static void init_glip(void)
                   &glip_log_handler);
     if (rv < 0) {
         fatal("Unable to create new GLIP context (rv=%d).\n", rv);
+    }
+
+    if (glip_get_fifo_width(glip_ctx) != 2) {
+        fatal("FIFO width of GLIP channel must be 16 bit, not %d bit.\n",
+              glip_get_fifo_width(glip_ctx) * 8);
     }
 
     // route log messages to our log handler
@@ -301,10 +393,20 @@ int main(int argc, char** argv)
     init_osd_com();
 
     // connect to device
-    dbg("Attempting connection to device.\n");
+    dbg("Attempting connection to device\n");
     int rv = glip_open(glip_ctx, 1);
     if (rv < 0) {
         fatal("Unable to open connection to device.\n");
+    }
+    dbg("Connected to device\n");
+
+    struct osd_module_desc *modules;
+    size_t modules_len;
+    osd_result osd_rv;
+    osd_com_connect(osd_com_ctx);
+    osd_rv = osd_com_get_modules(osd_com_ctx, &modules, &modules_len);
+    if (OSD_FAILED(osd_rv)) {
+        fatal("Unable to get a list of debug modules from the device\n")
     }
 
 
