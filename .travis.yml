@@ -2,8 +2,15 @@ language: c
 
 sudo: false
 
-before_install:
-  - ./install-build-deps.sh
+addons:
+  apt:
+    packages:
+      - check
+      - doxygen
+      - python3
+      - python3-venv
+      - python3-pip
+      - lcov
 
 script:
   - ./autogen.sh
