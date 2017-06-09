@@ -1,3 +1,26 @@
+# Copyright (c) 2017 by the author(s)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#
+# Author(s):
+#   Philipp Wagner <philipp.wagner@tum.de>
+
 # Open SoC Debug version information
 # Update this on every release. For API changes also update the library
 # version below!
@@ -79,6 +102,20 @@ AS_IF([test "x$enable_daemon" != "xno"], [
 ])
 AM_CONDITIONAL([ENABLE_DAEMON], [test "x$enable_daemon" != "xno"])
 
+# documentation
+AC_ARG_ENABLE([docs],
+    AS_HELP_STRING([--enable-docs], [build documentation @<:@default=disabled@:>@]),
+    [],
+    [enable_docs=no])
+AS_IF([test "x$enable_docs" = "xyes"], [
+    AC_CHECK_PROG([DOXYGEN], [doxygen], [doxygen])
+    AS_IF([ test -z "$DOXYGEN" ], [
+			AC_MSG_ERROR([doxygen is required to build the documentation.])
+		])
+])
+AM_CONDITIONAL([BUILD_DOCS], [test "x$enable_docs" = "xyes"])
+
+
 # check for libreadline
 #AC_CHECK_LIB([readline], [readline], [
 #    READLINE_LIBS=-lreadline
@@ -131,18 +168,6 @@ AM_LDFLAGS="-Wl,--gc-sections \
     $CODE_COVERAGE_LIBS"
 AC_SUBST(AM_LDFLAGS)
 
-dnl ----- DOCUMENTATION -----
-DX_HTML_FEATURE(ON)
-DX_CHM_FEATURE(OFF)
-DX_CHI_FEATURE(OFF)
-DX_MAN_FEATURE(OFF)
-DX_RTF_FEATURE(OFF)
-DX_XML_FEATURE(ON)
-DX_PDF_FEATURE(OFF)
-DX_PS_FEATURE(OFF)
-DX_INIT_DOXYGEN(osd-software, doc/doxygen.cfg, apidoc)
-
-
 AC_CONFIG_HEADERS(config.h)
 AC_CONFIG_FILES([
         Makefile
@@ -171,10 +196,9 @@ COMPILER OPTIONS
   cflags:                 ${CFLAGS}
   ldflags:                ${LDFLAGS}
 
-ENABLED TOOLS
-  osd-daemon              ${enable_daemon}
-  
-Now run
-make
-to start the build process.
+ENABLED TOOLS])
+AS_IF([test "x$enable_daemon" != "xno"], AC_MSG_RESULT([  osd-daemon]))
+
+AC_MSG_RESULT([
+You can now run 'make' to start the build process.
 ])

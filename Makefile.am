@@ -19,7 +19,6 @@
 # THE SOFTWARE.
 #
 # Author(s):
-#   Stefan Wallentowitz <stefan.wallentowitz@tum.de>
 #   Philipp Wagner <philipp.wagner@tum.de>
 
 EXTRA_DIST =
@@ -27,13 +26,12 @@ CLEANFILES =
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
 AM_MAKEFLAGS = --no-print-directory
 
-SUBDIRS = src . tests doc
+SUBDIRS = src . tests
 
 # prepare pkg-config file
 SED_PROCESS = \
     $(AM_V_GEN)$(MKDIR_P) $(dir $@) && $(SED) \
     -e 's,@VERSION\@,$(VERSION),g' \
-    -e 's,@SRCDIR\@,$(srcdir),g' \
     -e 's,@prefix\@,$(prefix),g' \
     -e 's,@exec_prefix\@,$(exec_prefix),g' \
     -e 's,@libdir\@,$(libdir),g' \
@@ -44,14 +42,24 @@ SED_PROCESS = \
 	$(SED_PROCESS)
 
 .PHONY: doc
+if BUILD_DOCS
+SUBDIRS += doc
 doc:
 	$(MAKE) -C doc html
+else
+doc:
+	@echo Run configure with --enable-docs to enable documentation building.
+endif
 
+.PHONY: check-code-coverage
+if CODE_COVERAGE_ENABLED
 check-code-coverage:
 	$(MAKE) -C tests/unit check-code-coverage
+else
+	@echo Run configure with --enable-code-coverage for coverage support.
+endif
 
 pkgconfigdir = $(datadir)/pkgconfig
 pkgconfig_DATA = osd.pc
 EXTRA_DIST += osd.pc.in $(DX_CONFIG)
 CLEANFILES += osd.pc
-MOSTLYCLEANFILES = $(DX_CLEANFILES)

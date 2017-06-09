@@ -52,11 +52,11 @@ doxygen: doxygen.cfg
 	doxygen doxygen.cfg
 
 # Convert images to PDF before running the LaTeX PDF build
-latexpdf: .venv Makefile images-pdf
+latexpdf: .venv images-pdf
 	@$(SPHINXBUILD) -M latexpdf "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 # Convert images to PDF before running the LaTeX PDF build
-html: .venv Makefile
+html: .venv doxygen
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 clean-images:
@@ -66,17 +66,16 @@ clean-doxygen:
 	rm doxygen.cfg
 	rm -r xml
 
-clean: .venv Makefile clean-images clean-doxygen
+clean: .venv clean-images clean-doxygen
 	@$(SPHINXBUILD) -M clean "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 distclean:
 	-rm -rf .venv sphinx/__pycache__
 
-
-.PHONY: help Makefile doxygen html
+.PHONY: help doxygen html
 
 # these targets are required by automake, but are not used here
-EMPTY_AUTOMAKE_TARGETS = dvi pdf ps info html tags ctags check installcheck
+EMPTY_AUTOMAKE_TARGETS = dvi pdf ps info tags ctags check installcheck
 .PHONY: $(EMPTY_AUTOMAKE_TARGETS)
 $(EMPTY_AUTOMAKE_TARGETS):
 
