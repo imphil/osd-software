@@ -1,6 +1,7 @@
 *~
 *.kate-swp
 Makefile.in
+!doc/Makefile.in
 .cproject
 .project
 .settings
