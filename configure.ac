@@ -70,7 +70,7 @@ AC_PROG_SED
 AC_PROG_MKDIR_P
 
 # check unit testing framework
-PKG_CHECK_MODULES([CHECK], [check >= 0.10.0])
+PKG_CHECK_MODULES([CHECK], [check >= 0.9.10])
 
 # test coverage with gcov and reporting with lcov
 AX_CODE_COVERAGE
