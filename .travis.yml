@@ -1,6 +1,6 @@
-language: c
-
+dist: trusty
 sudo: false
+language: c
 
 addons:
   apt:
