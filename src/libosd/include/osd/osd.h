@@ -16,14 +16,10 @@
 extern "C" {
 #endif
 
-/**
- * Standard return type
- */
+/** Standard return type */
 typedef int osd_result;
 
-/*
- * Return code: The operation was successful
- */
+/** Return code: The operation was successful */
 #define OSD_OK 0
 /** Return code: Generic (unknown) failure */
 #define OSD_ERROR_FAILURE -1
@@ -33,6 +29,12 @@ typedef int osd_result;
 #define OSD_ERROR_DEVICE_INVALID_DATA -3
 /** Return code: failed to communicate with device */
 #define OSD_ERROR_COM -4
+/** Return code: operation timed out */
+#define OSD_ERROR_TIMEDOUT -5
+/** Return code: not connected to the device */
+#define OSD_ERROR_NOT_CONNECTED -6
+/** Return code: not all debug modules have been properly enumerated */
+#define OSD_ERROR_ENUMERATION_INCOMPLETE -7
 /** Return code: Out of memory */
 #define OSD_ERROR_OOM -11
 

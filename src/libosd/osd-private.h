@@ -49,6 +49,28 @@ void osd_log(struct osd_log_ctx *ctx,
              __attribute__((format(printf, 6, 7)));
 
 
+static inline uint32_t __iter_div_u64_rem(uint64_t dividend, uint32_t divisor,
+                                          uint64_t *remainder)
+{
+    uint32_t ret = 0;
+
+    while (dividend >= divisor) {
+        /* The following asm() prevents the compiler from
+           optimising this loop into a modulo operation. */
+        asm("" : "+rm"(dividend));
+        dividend -= divisor;
+        ret++;
+    }
+    *remainder = dividend;
+    return ret;
+}
+
+#define NSEC_PER_SEC 1000000000L
+static inline void timespec_add_ns(struct timespec *a, uint64_t ns)
+{
+    a->tv_sec += __iter_div_u64_rem(a->tv_nsec + ns, NSEC_PER_SEC, &ns);
+    a->tv_nsec = ns;
+}
 
 #define BIT(x)                (1UL << (x))
 //#define BIT_MASK(x)           (1UL << ((x) % BITS_PER_LONG))

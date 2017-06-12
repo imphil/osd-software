@@ -3,76 +3,47 @@
 
 #pragma once
 
-/**
- * Debug Transport Datagram
- */
-typedef uint16_t* osd_dtd;
-
-/**
- * Get the size of the Debug Transport Datagram in words
- */
-size_t osd_dtd_get_size_words(osd_dtd dtd)
-{
-    if (!dtd) {
-        return 0;
-    }
-
-    // the first word in the DTD always contains the size. We then need to add
-    // the word containing the size itself.
-    return dtd[0] + 1;
-}
-
-/**
- * Get the Debug Transport Datagram representation of a packet
- *
- * Note that the ownership of the data in @p dtd remains with the packet, do
- * not free @p dtd.
- */
-osd_result osd_packet_get_dtd(struct osd_packet *packet, osd_dtd *dtd)
-{
-    *dtd = &packet->size_data;
-    return OSD_OK;
-}
-
-/**
- * Set the data of a packet from a Debug Transport Datagram
- *
- * The ownership of the @p dtd is transferred to the packet, @p dtd may not be
- * used or freed anymore after calling this function.
- */
-/*osd_result osd_packet_set_dtd(struct osd_packet* packet, osd_dtd dtd)
-{
-    &packet->size_data = dtd;
-    return OSD_OK;
-}*/
-
+/** Information about the connected system */
 struct osd_system_info {
+    /** vendor identifier */
     uint16_t vendor_id;
+    /** device identifier */
     uint16_t device_id;
+    /** maximum number of words in a debug packet supported by the device */
     uint16_t max_pkt_len;
 };
 
+/**
+ * Communication context
+ */
 struct osd_com_ctx {
-    int is_running;
+    /** Is the library connected to a device? */
+    int is_connected;
 
     /** Logging context */
     struct osd_log_ctx *log_ctx;
+
+    /** Control interface (from/to the device) */
     struct osd_com_device_if *device_ctrl_if;
+    /** Event interface (from/to the device) */
     struct osd_com_device_if *device_event_if;
-    enum osd_com_byte_order device_transport_byte_order;
+
     /** Control data receive thread */
     pthread_t thread_ctrl_receive;
-
-    struct osd_system_info system_info;
-    struct osd_module_desc *modules;
-    size_t modules_len;
-
     /** Lock protecting all register accesses */
     pthread_mutex_t reg_access_lock;
     /** Register access response has been received */
     pthread_cond_t reg_access_complete;
     /** Last received control packet */
     struct osd_packet *rcv_ctrl_packet;
+
+    /** system information */
+    struct osd_system_info system_info;
+
+    /** list of modules in the system */
+    struct osd_module_desc *modules;
+    /** number of elements in modules */
+    size_t modules_len;
 };
 
 
@@ -80,11 +51,20 @@ struct osd_com_ctx {
 struct osd_com_client {
 };
 
+/**
+ * Debug Transport Datagram
+ */
+typedef uint16_t* osd_dtd;
+
+size_t osd_dtd_get_size_words(osd_dtd dtd);
+osd_result osd_packet_get_dtd(struct osd_packet *packet, osd_dtd *dtd);
+osd_result osd_dtd_to_packet(osd_dtd dtd, struct osd_packet** packet);
+
 // register maps
 // base register map (common across all debug modules)
-#define REG_BASE_MOD_ID          0x0000 /* module id */
-#define REG_BASE_MOD_VERSION     0x0001 /* module version */
-#define REG_BASE_MOD_VENDOR      0x0002 /* module vendor */
+#define REG_BASE_MOD_TYPE        0x0000 /* module type */
+#define REG_BASE_MOD_VENDOR      0x0001 /* module version */
+#define REG_BASE_MOD_VERSION     0x0002 /* module vendor */
 #define REG_BASE_MOD_CS          0x0003 /* control and status */
   #define REG_BASE_MOD_CS_ACTIVE   BIT(0) /* activate/stall module */
 #define REG_BASE_MOD_EVENT_DEST  0x0004 /* event destination */

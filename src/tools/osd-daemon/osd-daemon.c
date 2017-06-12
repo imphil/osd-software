@@ -393,20 +393,34 @@ int main(int argc, char** argv)
     init_osd_com();
 
     // connect to device
-    dbg("Attempting connection to device\n");
+    dbg("Attempting physical connection to device.\n");
     int rv = glip_open(glip_ctx, 1);
     if (rv < 0) {
         fatal("Unable to open connection to device.\n");
     }
-    dbg("Connected to device\n");
+    dbg("Physical connection established.\n");
 
     struct osd_module_desc *modules;
     size_t modules_len;
     osd_result osd_rv;
-    osd_com_connect(osd_com_ctx);
+
+    dbg("Connecting to debug system\n");
+    osd_rv = osd_com_connect(osd_com_ctx);
+    if (OSD_FAILED(osd_rv)) {
+        fatal("Unable to connect to debug system\n");
+    }
+    dbg("Connection to debug system established.\n");
+
+    dbg("Enumerating modules in debug system\n");
     osd_rv = osd_com_get_modules(osd_com_ctx, &modules, &modules_len);
     if (OSD_FAILED(osd_rv)) {
         fatal("Unable to get a list of debug modules from the device\n")
+    }
+    dbg("Found %zu debug modules\n", modules_len);
+
+    for (size_t i = 0; i < modules_len; i++) {
+        dbg("[0x%04x] %u.%u (v%u)\n", modules[i].addr, modules[i].vendor,
+            modules[i].type, modules[i].version);
     }
 
 

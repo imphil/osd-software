@@ -1,10 +1,32 @@
-# Build the OSD Documentation
+# Copyright (c) 2017 by the author(s)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#
+# Author(s):
+#   Philipp Wagner <philipp.wagner@tum.de>
+
+# Build the OSD Software Documentation
 #
 # Note: this Makefile is *not* used by Read The Docs, it exec()'s the conf.py
 # file directly. Hence, all special build steps here are only relevant for
 # local builds, not for RTD builds. Add all build steps which should be executed
 # in RTD builds as Python code into the conf.py file.
-#
 
 srcdir = @srcdir@
 VPATH = @srcdir@
@@ -78,14 +100,3 @@ distclean:
 EMPTY_AUTOMAKE_TARGETS = dvi pdf ps info tags ctags check installcheck
 .PHONY: $(EMPTY_AUTOMAKE_TARGETS)
 $(EMPTY_AUTOMAKE_TARGETS):
-
-
-# Catch-all target: route all unknown targets to Sphinx using the new
-# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
-#.DEFAULT:
-	# Dependencies for this special target are ignored by make, as discussed in
-	# http://stackoverflow.com/questions/26875072/dependencies-for-special-make-target-default-not-firing
-	# We hack around that by calling the target explicitly.
-#	make .venv doxygen
-
-#	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)

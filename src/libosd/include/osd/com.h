@@ -34,15 +34,10 @@
 extern "C" {
 #endif
 
-/**
- * Request non-blocking operation
- */
+/** Request non-blocking operation */
 #define OSD_COM_NONBLOCK 0x400
-
-enum osd_com_byte_order{
-    OSD_COM_BIG_ENDIAN,
-    OSD_COM_LITTLE_ENDIAN
-};
+/** Operation never times out */
+#define OSD_COM_WAIT_FOREVER 1
 
 /**
  * Opaque context object
@@ -57,21 +52,25 @@ struct osd_com_ctx;
  *
  * @see struct osd_com_device_if
  */
-typedef ssize_t (*osd_com_device_write_fn)(uint16_t *buf, size_t size, int flags);
+typedef ssize_t (*osd_com_device_write_fn)(uint16_t *buf, size_t size,
+                                           int flags);
 
 /**
  * Function template: read data from the device
  *
  * @see struct osd_com_device_if
  */
-typedef ssize_t (*osd_com_device_read_fn)(uint16_t *buf, size_t size, int flags);
+typedef ssize_t (*osd_com_device_read_fn)(uint16_t *buf, size_t size,
+                                          int flags);
 
 
 /**
  * Read/write interface of a device
  */
 struct osd_com_device_if {
+    /** write data to the device */
     osd_com_device_write_fn write;
+    /** read data from the device */
     osd_com_device_read_fn read;
 };
 
@@ -97,6 +96,7 @@ osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
 
 osd_result osd_com_connect(struct osd_com_ctx *ctx);
 osd_result osd_com_disconnect(struct osd_com_ctx *ctx);
+int osd_com_is_connected(struct osd_com_ctx *ctx);
 
 osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
                             const unsigned int module_addr,
@@ -105,11 +105,6 @@ osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
                             const int flags);
 
 #if 0
-
-/**
- * Connect to the device
- */
-osd_result osd_com_connect_to_device(struct osd_com_ctx ctx);
 
 
 // API to the higher layers

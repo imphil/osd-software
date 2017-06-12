@@ -115,7 +115,13 @@ static ssize_t mock_device_read(uint16_t *buf, size_t size_words, int flags)
     struct mock_packet *p;
     p = mock_read_packet_exp_queue.head;
 
-    ck_assert_ptr_ne(p, NULL);
+    while (!p) {
+        /*
+         * Block "forever" (i.e. until the test runs into a timeout) if no data
+         * is available to be transferred to the host.
+         */
+        sleep(100);
+    }
 
     osd_dtd dtd;
     osd_packet_get_dtd(p->packet, &dtd);
@@ -249,6 +255,33 @@ START_TEST(test_core_read_register)
 }
 END_TEST
 
+/**
+ * Test timeout handling if a debug module doesn't respond to a register read
+ * request.
+ */
+START_TEST(test_core_read_register_timeout)
+{
+    osd_result rv;
+
+    uint16_t reg_read_result;
+
+    // add only request to mock, create no response
+    struct osd_packet *pkg_read_req;
+    rv = osd_packet_new(&pkg_read_req, 1);
+    ck_assert_ptr_ne(pkg_read_req, NULL);
+    ck_assert_int_eq(rv, OSD_OK);
+
+    osd_packet_set_header(pkg_read_req, 1, OSD_MOD_ADDR_HIM,
+                          OSD_PACKET_TYPE_REG, REQ_READ_REG_16);
+    pkg_read_req->data.payload[0] = 0x0000;
+
+    mock_packet_queue_push(&mock_write_packet_exp_queue, pkg_read_req);
+
+    rv = osd_com_reg_read(com_ctx, 1, 0x0000, 16, &reg_read_result, 0);
+    ck_assert_int_eq(rv, OSD_ERROR_TIMEDOUT);
+}
+END_TEST
+
 Suite * com_suite(void)
 {
     Suite *s;
@@ -268,6 +301,7 @@ Suite * com_suite(void)
     tc_core = tcase_create("Core");
     tcase_add_checked_fixture(tc_core, setup, teardown);
     tcase_add_test(tc_core, test_core_read_register);
+    tcase_add_test(tc_core, test_core_read_register_timeout);
     suite_add_tcase(s, tc_core);
 
     return s;

@@ -1,4 +1,5 @@
-# Unit tests
+Unit Tests
+==========
 
 The OSD software comes with an extensive set of unit tests, written using the `Check framework <https://libcheck.github.io/check/>`_.
 
