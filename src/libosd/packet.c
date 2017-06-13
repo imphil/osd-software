@@ -26,7 +26,7 @@
 osd_result osd_packet_new(struct osd_packet **packet,
                           const unsigned int size_payload)
 {
-    uint16_t size_data = size_payload + 2 /* DP_HEADER_1 and DP_HEADER_2 */;
+    uint16_t size_data = size_payload + 3 /* DP_HEADER_{1-3} */;
     ssize_t size = sizeof(uint16_t) * 1            // osd_packet.size
                    + sizeof(uint16_t) * size_data; // osd_packet.data_raw
     struct osd_packet *pkg = calloc(1, size);
@@ -70,7 +70,7 @@ unsigned int osd_packet_get_src(const struct osd_packet *packet)
  */
 unsigned int osd_packet_get_type(const struct osd_packet *packet)
 {
-    return (packet->data.dp_header_2 >> DP_HEADER_TYPE_SHIFT)
+    return (packet->data.dp_header_3 >> DP_HEADER_TYPE_SHIFT)
            & DP_HEADER_TYPE_MASK;
 }
 
@@ -79,7 +79,7 @@ unsigned int osd_packet_get_type(const struct osd_packet *packet)
  */
 unsigned int osd_packet_get_type_sub(const struct osd_packet *packet)
 {
-    return (packet->data.dp_header_2 >> DP_HEADER_TYPE_SUB_SHIFT)
+    return (packet->data.dp_header_3 >> DP_HEADER_TYPE_SUB_SHIFT)
            & DP_HEADER_TYPE_SUB_MASK;
 }
 
@@ -102,26 +102,27 @@ osd_result osd_packet_set_header(struct osd_packet* packet,
 {
     packet->data.dp_header_1 = 0x0000;
     packet->data.dp_header_2 = 0x0000;
+    packet->data.dp_header_3 = 0x0000;
 
     // DEST
     assert((dest & DP_HEADER_DEST_MASK) == dest); // overflow detection
     packet->data.dp_header_1 |= (dest & DP_HEADER_DEST_MASK)
             << DP_HEADER_DEST_SHIFT;
 
-    // TYPE
-    assert((type & DP_HEADER_TYPE_MASK) == type);
-    packet->data.dp_header_2 |= (type & DP_HEADER_TYPE_MASK)
-            << DP_HEADER_TYPE_SHIFT;
-
-    // TYPE_SUB
-    assert((type_sub & DP_HEADER_TYPE_SUB_MASK) == type_sub);
-    packet->data.dp_header_2 |= (type_sub & DP_HEADER_TYPE_SUB_MASK)
-            << DP_HEADER_TYPE_SUB_SHIFT;
-
     // SRC
     assert((src & DP_HEADER_SRC_MASK) == src);
     packet->data.dp_header_2 |= (src & DP_HEADER_SRC_MASK)
             << DP_HEADER_SRC_SHIFT;
+
+    // TYPE
+    assert((type & DP_HEADER_TYPE_MASK) == type);
+    packet->data.dp_header_3 |= (type & DP_HEADER_TYPE_MASK)
+            << DP_HEADER_TYPE_SHIFT;
+
+    // TYPE_SUB
+    assert((type_sub & DP_HEADER_TYPE_SUB_MASK) == type_sub);
+    packet->data.dp_header_3 |= (type_sub & DP_HEADER_TYPE_SUB_MASK)
+            << DP_HEADER_TYPE_SUB_SHIFT;
 
     return OSD_OK;
 }

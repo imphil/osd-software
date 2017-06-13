@@ -9,10 +9,10 @@
 #define DP_HEADER_TYPE_SUB_MASK  0b1111
 
 #define DP_HEADER_SRC_SHIFT      0
-#define DP_HEADER_SRC_MASK       ((1 << 10) - 1)
+#define DP_HEADER_SRC_MASK       ((1 << 16) - 1)
 
 #define DP_HEADER_DEST_SHIFT     0
-#define DP_HEADER_DEST_MASK      ((1 << 10) - 1)
+#define DP_HEADER_DEST_MASK      ((1 << 16) - 1)
 
 
 osd_result osd_packet_new(struct osd_packet **packet,

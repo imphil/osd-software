@@ -47,7 +47,7 @@
 #define REG_ACCESS_TIMEOUT_NS (1*1000*1000*1000) // 1 s
 
 /** Debugging aid: log all sent and received packets */
-#define LOG_TRANSMITTED_PACKETS 0
+#define LOG_TRANSMITTED_PACKETS 1
 
 /**
  * Read the system information from the device, as stored in the SCM
@@ -93,7 +93,7 @@ static osd_result discover_debug_module(struct osd_com_ctx *ctx,
 
     desc->addr = module_addr;
 
-    rv = osd_com_reg_read(ctx, module_addr, REG_BASE_MOD_ID, 16,
+    rv = osd_com_reg_read(ctx, module_addr, REG_BASE_MOD_TYPE, 16,
                           &desc->type, 0);
     if (OSD_FAILED(rv)) {
         return rv;
@@ -262,10 +262,10 @@ static void* thread_ctrl_receive(void *ctx_void)
         }
 
         // allocate buffer for the to-be-received packet
-        assert(pkg_size_words >= 2);
-        // we have two header words (DP_HEADER_1 and DP_HEADER_2, everything
+        assert(pkg_size_words >= 3);
+        // we have three header words (DP_HEADER_{1-3}, everything
         // else is payload
-        unsigned int pacload_size = pkg_size_words - 2;
+        unsigned int pacload_size = pkg_size_words - 3;
         struct osd_packet *packet;
         osd_packet_new(&packet, pacload_size);
 
@@ -506,7 +506,7 @@ osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
 /**
  * Read a register of a module in the debug system
  *
- * Unless the flag OSD_WAIT_FOREVER has been set this function waits up to
+ * Unless the flag OSD_COM_WAIT_FOREVER has been set this function waits up to
  * REG_ACCESS_TIMEOUT_NS ns for the register access to complete.
  *
  * @param ctx the osd_com context object
@@ -516,11 +516,11 @@ osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
  *                     Supported values: 16, 32, 64 and 128.
  * @param[out] result the result of the register read. Preallocate a variable
  *                    large enough to hold @p reg_size_bit bits.
- * @param flags flags. Set OSD_WAIT_FOREVER to block indefinetly until the
+ * @param flags flags. Set OSD_COM_WAIT_FOREVER to block indefinetly until the
  *              access succeeds.
  * @return OSD_OK on success, any other value indicates an error
  * @return OSD_ERROR_TIMEDOUT if the register read timed out (only if
- *         OSD_WAIT_FOREVER is not set)
+ *         OSD_COM_WAIT_FOREVER is not set)
  */
 API_EXPORT
 osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
@@ -535,7 +535,7 @@ osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
     int use_timeout;
     struct timespec abs_timeout;
     clock_gettime(CLOCK_REALTIME, &abs_timeout);
-    if (flags & OSD_WAIT_FOREVER) {
+    if (flags & OSD_COM_WAIT_FOREVER) {
         use_timeout = 0;
     } else {
         use_timeout = 1;
@@ -672,7 +672,7 @@ osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
     }
 
     // validate response size
-    unsigned int exp_size_data_words = 2 /* DP_HEADER_1 and DP_HEADER_2 */ +
+    unsigned int exp_size_data_words = 3 /* DP_HEADER_{1-3} */ +
             reg_size_bit / 16 /* payload */;
     if (pkg_read_resp->size_data != exp_size_data_words) {
         err(ctx->log_ctx, "Expected %d 16 bit data words in register read "

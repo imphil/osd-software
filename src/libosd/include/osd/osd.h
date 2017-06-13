@@ -108,6 +108,7 @@ struct osd_packet {
         struct {
             uint16_t dp_header_1;
             uint16_t dp_header_2;
+            uint16_t dp_header_3;
             uint16_t payload[0];   //!< |size_data| - 2 words of payload
         } data;
 
