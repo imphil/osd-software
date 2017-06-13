@@ -62,8 +62,8 @@ osd_result osd_dtd_to_packet(osd_dtd dtd, struct osd_packet** packet);
 
 // register maps
 // base register map (common across all debug modules)
-#define REG_BASE_MOD_TYPE        0x0000 /* module type */
-#define REG_BASE_MOD_VENDOR      0x0001 /* module version */
+#define REG_BASE_MOD_VENDOR      0x0000 /* module type */
+#define REG_BASE_MOD_TYPE        0x0001 /* module version */
 #define REG_BASE_MOD_VERSION     0x0002 /* module vendor */
 #define REG_BASE_MOD_CS          0x0003 /* control and status */
   #define REG_BASE_MOD_CS_ACTIVE   BIT(0) /* activate/stall module */

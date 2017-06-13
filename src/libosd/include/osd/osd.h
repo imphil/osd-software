@@ -176,8 +176,8 @@ struct osd_module_desc {
 };
 
 // Module addresses defined by the OSD spec
-#define OSD_MOD_ADDR_HIM 0 //< Address of the Host Interface Module
-#define OSD_MOD_ADDR_SCM 1 //< Address of the System Control Module
+#define OSD_MOD_ADDR_HIM (17 | (1<<10))  /* subnet *///< Address of the Host Interface Module
+#define OSD_MOD_ADDR_SCM 0 //< Address of the System Control Module
 
 const struct osd_version * osd_version_get(void);
 

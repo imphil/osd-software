@@ -135,7 +135,7 @@ static osd_result enumerate_debug_modules(struct osd_com_ctx *ctx)
     ctx->modules = calloc(num_modules, sizeof(struct osd_module_desc));
     ctx->modules_len = num_modules;
 
-    for (uint16_t module_addr = 0; module_addr < num_modules; module_addr++) {
+    for (uint16_t module_addr = 2; module_addr < num_modules; module_addr++) {
         rv = discover_debug_module(ctx, module_addr);
         if (OSD_FAILED(rv)) {
             err(ctx->log_ctx, "Failed to obtain information about debug "
