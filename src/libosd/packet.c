@@ -14,21 +14,31 @@
 #define MACROSTR(k) #k
 
 /**
+ * Get the data size including all headers for a given payload size
+ */
+static const uint16_t get_size_data_from_payload(const unsigned int size_payload)
+{
+    unsigned int s = size_payload + 3 /* dest, src, flags */;
+    assert(s <= UINT16_MAX);
+    return s;
+}
+
+/**
  * Allocate memory for a packet with given payload size and zero all data fields
  *
  * The osd_packet.size field is set to the allocated size.
  *
  * @param[out] packet the packet to be allocated
- * @param[in] size_payload number of uint16_t payload words in
- *                     osd_packet.data.payload
+ * @param[in]  size_payload number of uint16_t payload words in
+ *                          osd_packet.data.payload
  * @return the allocated packet, or NULL if allocation fails
  */
 osd_result osd_packet_new(struct osd_packet **packet,
                           const unsigned int size_payload)
 {
-    uint16_t size_data = size_payload + 3 /* DP_HEADER_{1-3} */;
-    ssize_t size = sizeof(uint16_t) * 1            // osd_packet.size
-                   + sizeof(uint16_t) * size_data; // osd_packet.data_raw
+    uint16_t size_data =  get_size_data_from_payload(size_payload);
+    ssize_t size = sizeof(uint16_t) * 1            // osd_packet.size_data
+                   + sizeof(uint16_t) * size_data; // osd_packet.data
     struct osd_packet *pkg = calloc(1, size);
     assert(pkg);
 
@@ -52,7 +62,7 @@ void osd_packet_free(struct osd_packet *packet)
  */
 unsigned int osd_packet_get_dest(const struct osd_packet *packet)
 {
-    return (packet->data.dp_header_1 >> DP_HEADER_DEST_SHIFT)
+    return (packet->data.dest >> DP_HEADER_DEST_SHIFT)
            & DP_HEADER_DEST_MASK;
 }
 
@@ -61,7 +71,7 @@ unsigned int osd_packet_get_dest(const struct osd_packet *packet)
  */
 unsigned int osd_packet_get_src(const struct osd_packet *packet)
 {
-    return (packet->data.dp_header_2 >> DP_HEADER_SRC_SHIFT)
+    return (packet->data.src >> DP_HEADER_SRC_SHIFT)
            & DP_HEADER_SRC_MASK;
 }
 
@@ -70,7 +80,7 @@ unsigned int osd_packet_get_src(const struct osd_packet *packet)
  */
 unsigned int osd_packet_get_type(const struct osd_packet *packet)
 {
-    return (packet->data.dp_header_3 >> DP_HEADER_TYPE_SHIFT)
+    return (packet->data.flags >> DP_HEADER_TYPE_SHIFT)
            & DP_HEADER_TYPE_MASK;
 }
 
@@ -79,7 +89,7 @@ unsigned int osd_packet_get_type(const struct osd_packet *packet)
  */
 unsigned int osd_packet_get_type_sub(const struct osd_packet *packet)
 {
-    return (packet->data.dp_header_3 >> DP_HEADER_TYPE_SUB_SHIFT)
+    return (packet->data.flags >> DP_HEADER_TYPE_SUB_SHIFT)
            & DP_HEADER_TYPE_SUB_MASK;
 }
 
@@ -100,28 +110,28 @@ osd_result osd_packet_set_header(struct osd_packet* packet,
                                  const enum osd_packet_type type,
                                  const unsigned int type_sub)
 {
-    packet->data.dp_header_1 = 0x0000;
-    packet->data.dp_header_2 = 0x0000;
-    packet->data.dp_header_3 = 0x0000;
+    packet->data.dest = 0x0000;
+    packet->data.src = 0x0000;
+    packet->data.flags = 0x0000;
 
     // DEST
     assert((dest & DP_HEADER_DEST_MASK) == dest); // overflow detection
-    packet->data.dp_header_1 |= (dest & DP_HEADER_DEST_MASK)
+    packet->data.dest |= (dest & DP_HEADER_DEST_MASK)
             << DP_HEADER_DEST_SHIFT;
 
     // SRC
     assert((src & DP_HEADER_SRC_MASK) == src);
-    packet->data.dp_header_2 |= (src & DP_HEADER_SRC_MASK)
+    packet->data.src |= (src & DP_HEADER_SRC_MASK)
             << DP_HEADER_SRC_SHIFT;
 
-    // TYPE
+    // FLAGS.TYPE
     assert((type & DP_HEADER_TYPE_MASK) == type);
-    packet->data.dp_header_3 |= (type & DP_HEADER_TYPE_MASK)
+    packet->data.flags |= (type & DP_HEADER_TYPE_MASK)
             << DP_HEADER_TYPE_SHIFT;
 
-    // TYPE_SUB
+    // FLAGS.TYPE_SUB
     assert((type_sub & DP_HEADER_TYPE_SUB_MASK) == type_sub);
-    packet->data.dp_header_3 |= (type_sub & DP_HEADER_TYPE_SUB_MASK)
+    packet->data.flags |= (type_sub & DP_HEADER_TYPE_SUB_MASK)
             << DP_HEADER_TYPE_SUB_SHIFT;
 
     return OSD_OK;

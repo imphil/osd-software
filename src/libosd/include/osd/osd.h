@@ -102,24 +102,18 @@ struct osd_version {
 // flexible arrays (uint16_t payload[]) as flexible array members are not
 // allowed in unions by the C standard.
 struct osd_packet {
-    //uint64_t flags; //<! various flags associated with this packet
-    uint16_t size_data; //!< size of |data| in uint16_t words
+    uint16_t size_data; //!< size of data (or data_raw) in uint16_t words
     union {
         struct {
-            uint16_t dp_header_1;
-            uint16_t dp_header_2;
-            uint16_t dp_header_3;
-            uint16_t payload[0];   //!< |size_data| - 2 words of payload
+            uint16_t dest;       //!< packet destination address
+            uint16_t src;        //!< packet source address
+            uint16_t flags;      //!< packet flags
+            uint16_t payload[0]; //!< (size_data - 3) words of payload
         } data;
 
-        uint16_t data_raw[0];    //!< |size_data| words of data
+        uint16_t data_raw[0];    //!< size_data words of data
     };
 };
-
-/** Byte order of osd_packet.data is little endian */
-#define OSD_PACKET_FLAG_DATA_LE 0x0
-/** Byte order of osd_packet.data is big endian */
-#define OSD_PACKET_FLAG_DATA_BE 0x1
 
 /**
  * Packet types
@@ -154,11 +148,10 @@ enum osd_packet_type_reg_subtype {
 };
 
 /**
- * Module type identifiers for the standard-defined modules (vendor id 0x00)
+ * Module type identifiers for the standard-defined modules (vendor id 0x01)
  */
 enum osd_module_type {
-    MOD_STD_HOST = 0, //!< the host
-    MOD_STD_SCM = 1, //!< System Control Module (SCM)
+    MOD_STD_SCM = 1, //!< Subnet Control Module (SCM)
     MOD_STD_DEM_UART = 2, //!< Device Emulation Module UART (DEM_UART)
     MOD_STD_MAM = 3, //!< Memory Access Module (MAM)
     MOD_STD_STM = 4, //!< System Trace Module (STM)
@@ -169,9 +162,9 @@ enum osd_module_type {
  * A single module instance in the Open SoC Debug system
  */
 struct osd_module_desc {
-    uint16_t addr;    //!< Address in the Debug Interconnect
-    uint16_t type;    //!< Module type
+    uint16_t addr;    //!< Module address
     uint16_t vendor;  //!< Module version
+    uint16_t type;    //!< Module type
     uint16_t version; //!< Module version
 };
 

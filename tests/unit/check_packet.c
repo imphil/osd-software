@@ -10,9 +10,9 @@ START_TEST(test_packet_header_extractparts)
     rv = osd_packet_new(&pkg, 0);
     ck_assert_int_eq(rv, OSD_OK);
 
-    pkg->data.dp_header_1 = 0xa5ab;
-    pkg->data.dp_header_2 = 0x1234;
-    pkg->data.dp_header_3 = 0x5557;
+    pkg->data.dest = 0xa5ab;
+    pkg->data.src = 0x1234;
+    pkg->data.flags = 0x5557;
     ck_assert_int_eq(osd_packet_get_dest(pkg), 0xa5ab);
     ck_assert_int_eq(osd_packet_get_src(pkg), 0x1234);
     ck_assert_int_eq(osd_packet_get_type(pkg), 0x1);
@@ -31,9 +31,9 @@ START_TEST(test_packet_header_set)
 
     osd_packet_set_header(pkg, 0x1ab, 0x157, OSD_PACKET_TYPE_PLAIN, 0x5);
 
-    ck_assert_int_eq(pkg->data.dp_header_1, 0x1ab);
-    ck_assert_int_eq(pkg->data.dp_header_2, 0x157);
-    ck_assert_int_eq(pkg->data.dp_header_3, 0x5400);
+    ck_assert_int_eq(pkg->data.dest, 0x1ab);
+    ck_assert_int_eq(pkg->data.src, 0x157);
+    ck_assert_int_eq(pkg->data.flags, 0x5400);
 
     osd_packet_free(pkg);
 }
