@@ -34,117 +34,36 @@
 extern "C" {
 #endif
 
-/** Request non-blocking operation */
-#define OSD_COM_NONBLOCK 0x400
-/** Operation never times out */
-#define OSD_COM_WAIT_FOREVER 1
 
-/**
- * Opaque context object
- *
- * This object contains all state information. Create and initialize a new
- * object with osd_com_new() and delete it with osd_com_free().
- */
-struct osd_com_ctx;
-
-/**
- * Function template: write data to the device
- *
- * @see struct osd_com_device_if
- */
-typedef ssize_t (*osd_com_device_write_fn)(uint16_t *buf, size_t size,
-                                           int flags);
-
-/**
- * Function template: read data from the device
- *
- * @see struct osd_com_device_if
- */
-typedef ssize_t (*osd_com_device_read_fn)(uint16_t *buf, size_t size,
-                                          int flags);
-
-
-/**
- * Read/write interface of a device
- */
-struct osd_com_device_if {
-    /** write data to the device */
-    osd_com_device_write_fn write;
-    /** read data from the device */
-    osd_com_device_read_fn read;
+struct osd_memory_descriptor {
+    uint16_t data_width;
+    uint16_t addr_width;
+    uint8_t num_regions;
+    struct {
+        uint64_t base_addr;
+        uint64_t size;
+    } regions[];
 };
 
-#if 0
 /**
- * Client talking to the osd-com library
+ * Get all memories in the system
  */
-struct osd_com_client;
-#endif
-
-osd_result osd_com_new(struct osd_com_ctx **ctx, struct osd_log_ctx *log_ctx);
-
-void osd_com_free(struct osd_com_ctx *ctx);
-
-osd_result osd_com_get_modules(struct osd_com_ctx *ctx,
-                               struct osd_module_desc **modules,
-                               size_t *modules_len);
-
-osd_result osd_com_set_device_ctrl_if(struct osd_com_ctx *ctx,
-                                      struct osd_com_device_if *event_if);
-osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
-                                       struct osd_com_device_if *event_if);
-
-osd_result osd_com_connect(struct osd_com_ctx *ctx);
-osd_result osd_com_disconnect(struct osd_com_ctx *ctx);
-int osd_com_is_connected(struct osd_com_ctx *ctx);
-
-osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
-                            const unsigned int module_addr,
-                            const uint16_t reg_addr,
-                            const int reg_size_bit, void *result,
-                            const int flags);
-
-#if 0
-
-
-// API to the higher layers
-
-// client management
-/**
- * Connect a client to the library
- */
-osd_result struct osd_com_client_connect(struct osd_com_ctx *ctx, struct osd_com_client* client);
+osd_result osd_memory_list(struct osd_memory_descriptor **memories);
 
 /**
- * Disconnect a client from the library
+ * Write data to a memory
  */
-osd_result struct osd_com_client_disconnect(struct osd_com_ctx *ctx, struct osd_com_client *client);
-
+osd_result osd_memory_write(struct osd_memory_descriptor *mem,
+                            const void *data, size_t nbyte,
+                            const unsigned int start_addr,
+                            int flags);
 
 /**
- * Give a client exclusive access to a OSD module
- *
- * XXX: this is only for write access, isn't it?
+ * Read data from a memory
  */
-osd_result osd_com_claim_module(struct *osd_com_ctx, struct osd_com_client client, osd_mod_desc_t *module);
-
-/**
- * Register a client as receiver for trace events
- *
- * XXX: this is only for 1:n event broadcasts?
- */
-osd_result osd_com_register_event_receiver(struct osd_com_ctx *ctx, struct osd_com_client client, unsigned int module_id);
-
-/**
- * Release a previously claimed module
- *
- * @see osd_com_claim_module()
- */
-osd_result osd_com_release_module(struct osd_com_ctx *ctx, unsigned int module_id)
-
-
-
-#endif
+osd_result osd_memory_read(struct osd_memory_descriptor *mem, uint8_t** data,
+                           size_t nbyte, const unsigned int start_addr,
+                           int flags);
 
 
 #ifdef __cplusplus

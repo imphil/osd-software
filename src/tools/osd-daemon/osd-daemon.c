@@ -5,31 +5,20 @@
 #include <osd/osd.h>
 #include <osd/com.h>
 
+#include "../cli-util.h"
+
 #include <libglip.h>
 #include <stdlib.h>
 #include <argp.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <byteswap.h>
-
-#define ANSI_COLOR_RED     "\x1b[31m"
-#define ANSI_COLOR_GREEN   "\x1b[32m"
-#define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
+#include <zmq.h>
 
 /**
  * Default GLIP backend to be used when connecting to a device
  */
 #define GLIP_DEFAULT_BACKEND "uart"
-
-
-static void cli_log(int priority, const char* category,
-                    const char *format, ...) __attribute__ ((format (printf, 3, 4)));
-
-#define dbg(arg...) cli_log(LOG_DEBUG, "osd-daemon", ## arg)
-#define info(arg...) cli_log(LOG_INFO, "osd-daemon", ## arg)
-#define err(arg...) cli_log(LOG_ERR, "osd-daemon", ## arg)
-#define fatal(arg...) { cli_log(LOG_CRIT, "osd-daemon", ## arg); exit(1); }
 
 const char *argp_program_bug_address =
   "https://github.com/opensocdebug/software/issues";
@@ -113,80 +102,6 @@ struct glip_ctx *glip_ctx;
  * Open SoC Debug communication library context
  */
 struct osd_com_ctx *osd_com_ctx;
-
-/**
- * Format a log message and print it out to the user
- *
- * All log messages end up in this function.
- */
-static void cli_vlog(int priority, const char* category,
-                     const char *format, va_list args)
-{
-    int max_priority;
-    if (arguments.verbose) {
-        max_priority = LOG_DEBUG;
-    } else {
-        max_priority = LOG_ERR;
-    }
-
-    if (priority > max_priority) {
-        return;
-    }
-
-    switch (priority) {
-    case LOG_DEBUG:
-        fprintf(stderr, "[DEBUG] ");
-        break;
-    case LOG_INFO:
-        if (arguments.color_output) fprintf(stderr, ANSI_COLOR_YELLOW);
-        fprintf(stderr, "[INFO]  ");
-        break;
-    case LOG_ERR:
-        if (arguments.color_output) fprintf(stderr, ANSI_COLOR_RED);
-        fprintf(stderr, "[ERROR] ");
-        break;
-    case LOG_CRIT:
-        if (arguments.color_output) fprintf(stderr, ANSI_COLOR_RED);
-        fprintf(stderr, "[FATAL] ");
-        break;
-    }
-
-    fprintf(stderr, "%s: ", category);
-    vfprintf(stderr, format, args);
-
-    if (arguments.color_output) fprintf(stderr, ANSI_COLOR_RESET);
-}
-
-/**
- * Log a message from this daemon (printf-style)
- *
- * To log a message, typically use the dbg(), info(), err() and fatal() macros
- * instead of this function.
- *
- * @param priority severity level (see the LOG_* constants from syslog.h)
- * @param category category string
- * @param format printf-style format string
- * @param ... arguments for the format string
- */
-static void cli_log(int priority, const char* category,
-                    const char *format, ...)
-{
-    va_list args;
-
-    va_start(args, format);
-    cli_vlog(priority, category, format, args);
-    va_end(args);
-}
-
-/**
- * Log handler for OSD
- */
-static void osd_log_handler(struct osd_log_ctx *ctx, int priority,
-                            const char *file, int line, const char *fn,
-                            const char *format, va_list args)
-{
-    cli_vlog(priority, "libosd", format, args);
-}
 
 /**
  * Log handler for GLIP
@@ -364,14 +279,18 @@ static void print_version(FILE *stream, struct argp_state *state)
     const struct osd_version *libosd_version = osd_version_get();
     const struct glip_version *libglip_version = glip_get_version();
 
+    int zmq_version_major, zmq_version_minor, zmq_version_patch;
+    zmq_version (&zmq_version_major, &zmq_version_minor, &zmq_version_patch);
+
     fprintf(stream, "osd-daemon %d.%d.%d%s (using libosd %d.%d.%d%s, "
-            "libglip %d.%d.%d%s)\n",
+            "libglip %d.%d.%d%s, libzmq %d.%d.%d)\n",
             OSD_VERSION_MAJOR, OSD_VERSION_MINOR, OSD_VERSION_MICRO,
             OSD_VERSION_SUFFIX,
             libosd_version->major, libosd_version->minor, libosd_version->micro,
             libosd_version->suffix,
             libglip_version->major, libglip_version->minor,
-            libglip_version->micro, libglip_version->suffix);
+            libglip_version->micro, libglip_version->suffix,
+            zmq_version_major, zmq_version_minor, zmq_version_patch);
 }
 
 // register print_version with argp
@@ -422,6 +341,22 @@ int main(int argc, char** argv)
         dbg("[0x%04x] %u.%u (v%u)\n", modules[i].addr, modules[i].vendor,
             modules[i].type, modules[i].version);
     }
+
+    //  Socket to talk to clients
+    void *context = zmq_ctx_new ();
+    void *responder = zmq_socket (context, ZMQ_REP);
+    int rc = zmq_bind (responder, "tcp://*:5555");
+    assert (rc == 0);
+
+    while (1) {
+        char buffer [10];
+        zmq_recv (responder, buffer, 10, 0);
+        printf ("Received Hello\n");
+        sleep (1);          //  Do some 'work'
+        zmq_send (responder, "World", 5, 0);
+    }
+    return 0;
+
 
 
     return 0;

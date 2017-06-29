@@ -75,6 +75,8 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.10])
 # test coverage with gcov and reporting with lcov
 AX_CODE_COVERAGE
 
+PKG_CHECK_MODULES([ZEROMQ], [zeromq])
+
 AC_ARG_ENABLE([logging],
     AS_HELP_STRING([--disable-logging], [disable system logging @<:@default=enabled@:>@]),
     [],
@@ -158,6 +160,8 @@ AM_CFLAGS="-Wall \
     -ffunction-sections \
     -fdata-sections \
     -pthread \
+    -I$(top_srcdir)/src/libosd/include \
+    -include $(top_builddir)/config.h \
     $CODE_COVERAGE_CFLAGS"
 AC_SUBST([AM_CFLAGS])
 
@@ -175,6 +179,7 @@ AC_CONFIG_FILES([
         src/libosd/Makefile
         src/tools/Makefile
         src/tools/osd-daemon/Makefile
+        src/tools/osd-systrace-log/Makefile
         tests/Makefile
         tests/unit/Makefile
         doc/Makefile
