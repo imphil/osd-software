@@ -1,48 +1,28 @@
+#include <osd/osd.h>
+
+#include <stdio.h>
+#include <unistd.h>
+
+#include "argtable3.h"
+#include "ini.h"
+
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-#define CLI_COMMON_OPTIONS \
-    {"verbose",  'v', 0,      0,  "Produce verbose output" }
-
-#define CLI_COMMON_ARGUMENTS \
-    int verbose; \
-    int color_output;
-
-
-/**
- * Print the program version to a stream
- *
- * This function is registered as hook with argp to be invoked when calling the
- * application with --version.
- */
-static void print_version(FILE *stream, struct argp_state *state)
-{
-    const struct osd_version *libosd_version = osd_version_get();
-    const struct glip_version *libglip_version = glip_get_version();
-
-    fprintf(stream, "osd-daemon %d.%d.%d%s (using libosd %d.%d.%d%s, "
-            "libglip %d.%d.%d%s)\n",
-            OSD_VERSION_MAJOR, OSD_VERSION_MINOR, OSD_VERSION_MICRO,
-            OSD_VERSION_SUFFIX,
-            libosd_version->major, libosd_version->minor, libosd_version->micro,
-            libosd_version->suffix,
-            libglip_version->major, libglip_version->minor,
-            libglip_version->micro, libglip_version->suffix);
-}
-
-// register print_version with argp
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
-
+static const char* DEFAULT_CONFIG_FILE = "/etc/osd/osd.conf";
 
 void cli_log(int priority, const char* category,
              const char *format, ...) __attribute__ ((format (printf, 3, 4)));
 
-#define dbg(arg...) cli_log(LOG_DEBUG, "osd-daemon", ## arg)
-#define info(arg...) cli_log(LOG_INFO, "osd-daemon", ## arg)
-#define err(arg...) cli_log(LOG_ERR, "osd-daemon", ## arg)
-#define fatal(arg...) { cli_log(LOG_CRIT, "osd-daemon", ## arg); exit(1); }
+#define dbg(arg...) cli_log(LOG_DEBUG, CLI_TOOL_PROGNAME, ## arg)
+#define info(arg...) cli_log(LOG_INFO, CLI_TOOL_PROGNAME, ## arg)
+#define err(arg...) cli_log(LOG_ERR, CLI_TOOL_PROGNAME, ## arg)
+#define fatal(arg...) { cli_log(LOG_CRIT, CLI_TOOL_PROGNAME, ## arg); exit(1); }
+
+int color_output = 0;
+int verbose = 0;
 
 /**
  * Format a log message and print it out to the user
@@ -53,7 +33,7 @@ static void cli_vlog(int priority, const char* category,
                      const char *format, va_list args)
 {
     int max_priority;
-    if (arguments.verbose) {
+    if (verbose) {
         max_priority = LOG_DEBUG;
     } else {
         max_priority = LOG_ERR;
@@ -68,15 +48,15 @@ static void cli_vlog(int priority, const char* category,
         fprintf(stderr, "[DEBUG] ");
         break;
     case LOG_INFO:
-        if (arguments.color_output) fprintf(stderr, ANSI_COLOR_YELLOW);
+        if (color_output) fprintf(stderr, ANSI_COLOR_YELLOW);
         fprintf(stderr, "[INFO]  ");
         break;
     case LOG_ERR:
-        if (arguments.color_output) fprintf(stderr, ANSI_COLOR_RED);
+        if (color_output) fprintf(stderr, ANSI_COLOR_RED);
         fprintf(stderr, "[ERROR] ");
         break;
     case LOG_CRIT:
-        if (arguments.color_output) fprintf(stderr, ANSI_COLOR_RED);
+        if (color_output) fprintf(stderr, ANSI_COLOR_RED);
         fprintf(stderr, "[FATAL] ");
         break;
     }
@@ -84,7 +64,7 @@ static void cli_vlog(int priority, const char* category,
     fprintf(stderr, "%s: ", category);
     vfprintf(stderr, format, args);
 
-    if (arguments.color_output) fprintf(stderr, ANSI_COLOR_RESET);
+    if (color_output) fprintf(stderr, ANSI_COLOR_RESET);
 }
 
 /**
@@ -114,4 +94,80 @@ void osd_log_handler(struct osd_log_ctx *ctx, int priority, const char *file,
                      int line, const char *fn, const char *format, va_list args)
 {
     cli_vlog(priority, "libosd", format, args);
+}
+
+static void print_version()
+{
+    const struct osd_version *libosd_version = osd_version_get();
+
+    printf("%s %d.%d.%d%s (using libosd %d.%d.%d%s)\n",
+           CLI_TOOL_PROGNAME,
+           OSD_VERSION_MAJOR, OSD_VERSION_MINOR, OSD_VERSION_MICRO,
+           OSD_VERSION_SUFFIX,
+           libosd_version->major, libosd_version->minor, libosd_version->micro,
+           libosd_version->suffix);
+}
+
+// command line arguments
+struct arg_lit *a_verbose, *a_help, *a_version;
+struct arg_file *a_config_file;
+struct arg_end *a_end;
+
+int osd_main();
+
+int main(int argc, char** argv)
+{
+    color_output = isatty(STDOUT_FILENO) || isatty(STDERR_FILENO);
+
+    // command line argument parsing
+    void *argtable[] = {
+        a_help    = arg_litn(NULL, "help", 0, 1,
+                           "display this help and exit"),
+        a_version = arg_litn(NULL, "version", 0, 1,
+                           "display version info and exit"),
+        a_verbose = arg_litn("v", "verbose", 0, 1, "verbose output"),
+        a_config_file = arg_filen("c", "config-file", "<file>", 0, 1,
+                               "non-standard configuration file location. "),
+        a_end     = arg_end(20),
+    };
+
+    int exitcode = 0;
+
+    a_config_file->filename = DEFAULT_CONFIG_FILE;
+
+    int nerrors;
+    nerrors = arg_parse(argc,argv,argtable);
+
+    if (a_help->count > 0) {
+        printf("Usage: %s", CLI_TOOL_PROGNAME);
+        arg_print_syntax(stdout, argtable, "\n");
+        printf(CLI_TOOL_SHORTDESC "\n\n");
+        arg_print_glossary(stdout, argtable, "  %-25s %s\n");
+        exitcode = 0;
+        goto exit;
+    }
+
+    if (a_version->count > 0) {
+        print_version();
+        exitcode = 0;
+        goto exit;
+    }
+
+    if (nerrors > 0) {
+        /* Display the error details contained in the arg_end struct.*/
+        arg_print_errors(stdout, a_end, CLI_TOOL_PROGNAME);
+        printf("Try '%s --help' for more information.\n", CLI_TOOL_PROGNAME);
+        exitcode = 1;
+        goto exit;
+    }
+
+    if (a_verbose->count) {
+        verbose = 1;
+    }
+
+    exitcode = osd_main();
+
+exit:
+    arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
+    return exitcode;
 }
