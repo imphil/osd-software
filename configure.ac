@@ -182,6 +182,7 @@ AC_CONFIG_FILES([
         src/tools/osd-daemon/Makefile
         src/tools/osd-systrace-log/Makefile
         src/tools/osd-host-controller/Makefile
+        src/tools/osd-device-gateway/Makefile
         tests/Makefile
         tests/unit/Makefile
         doc/Makefile

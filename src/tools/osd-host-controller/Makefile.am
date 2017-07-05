@@ -10,5 +10,8 @@ AM_CFLAGS += \
 	-include $(top_builddir)/config.h \
 	${libczmq_CFLAGS}
 
-osd_host_controller_SOURCES = ../argtable3.c\
+osd_host_controller_SOURCES = \
+	../argtable3.c \
+	../iniparser.c \
+	../dictionary.c \
 	osd-host-controller.c 

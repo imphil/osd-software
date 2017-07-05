@@ -35,8 +35,11 @@ typedef int osd_result;
 #define OSD_ERROR_NOT_CONNECTED -6
 /** Return code: not all debug modules have been properly enumerated */
 #define OSD_ERROR_ENUMERATION_INCOMPLETE -7
+/** Return code: operation aborted */
+#define OSD_ERROR_ABORTED -8
 /** Return code: Out of memory */
 #define OSD_ERROR_OOM -11
+
 
 /**
  * Return true if |rv| is an error code
