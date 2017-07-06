@@ -28,8 +28,8 @@
 
 #include <osd/osd.h>
 #include <osd/hostmod.h>
+#include <osd/packet.h>
 #include "osd-private.h"
-#include "packet.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -51,7 +51,7 @@ static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
 
     rv = zmsg_addstr(msg, "D");
     assert(rv == 0);
-    dbg(ctx->log_ctx, "siez: %d\n", packet->size_data);
+    dbg(ctx->log_ctx, "size: %d\n", packet->size_data);
     rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
     assert(rv == 0);
 
@@ -74,19 +74,19 @@ static osd_result read_system_info_from_device(struct osd_hostmod_ctx *ctx)
 {
     osd_result rv;
 
-    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_SYSTEM_VENDOR_ID, 16,
+    rv = osd_hostmod_reg_read(ctx, osd_diaddr_build(0, 0), REG_SCM_SYSTEM_VENDOR_ID, 16,
                           &ctx->system_info.vendor_id, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read VENDOR_ID from SCM (rv=%d)\n", rv);
         return rv;
     }
-    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_SYSTEM_DEVICE_ID, 16,
+    rv = osd_hostmod_reg_read(ctx, osd_diaddr_build(0, 0), REG_SCM_SYSTEM_DEVICE_ID, 16,
                           &ctx->system_info.device_id, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read DEVICE_ID from SCM (rv=%d)\n", rv);
         return rv;
     }
-    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_MAX_PKT_LEN, 16,
+    rv = osd_hostmod_reg_read(ctx, osd_diaddr_build(0, 0), REG_SCM_MAX_PKT_LEN, 16,
                           &ctx->system_info.max_pkt_len, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read MAX_PKT_LEN from SCM (rv=%d)\n", rv);
@@ -142,7 +142,7 @@ static osd_result enumerate_debug_modules(struct osd_hostmod_ctx *ctx)
     osd_result ret = OSD_OK;
     osd_result rv;
     uint16_t num_modules;
-    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_NUM_MOD, 16,
+    rv = osd_hostmod_reg_read(ctx, osd_diaddr_build(0, 0), REG_SCM_NUM_MOD, 16,
                           &num_modules, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read NUM_MOD from SCM\n");
@@ -293,6 +293,7 @@ static void handle_incoming_di_packet(struct osd_hostmod_ctx *ctx,
 
 static int rcv_msg(zloop_t *loop, zsock_t *reader, void *ctx_void)
 {
+    osd_result rv;
     struct osd_hostmod_ctx* ctx = (struct osd_hostmod_ctx*)ctx_void;
 
     zmsg_t *msg = zmsg_recv(reader);
@@ -306,11 +307,16 @@ static int rcv_msg(zloop_t *loop, zsock_t *reader, void *ctx_void)
         zframe_t *data_frame = zmsg_pop(msg);
         assert(data_frame);
         uint16_t *data = (uint16_t*)zframe_data(data_frame);
-        size_t data_size_words = zframe_size(data_frame) / sizeof(uint16_t);
+        size_t data_size_bytes = zframe_size(data_frame);
+        size_t data_size_words = data_size_bytes / sizeof(uint16_t);
         assert(data);
+        assert(data_size_words >= 3); /* 3 header words */
 
         struct osd_packet *packet;
-        osd_packet_new(&packet, data_size_words);
+        rv = osd_packet_new(&packet, data_size_words);
+        assert(rv == OSD_OK);
+
+        memcpy(packet->data_raw, data, data_size_bytes);
 
         handle_incoming_di_packet(ctx, packet);
 
@@ -411,11 +417,11 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 
     rv = zmsg_addstr(msg_req, "M");
     assert(rv == 0);
-    rv = zmsg_addstr(msg_req, "ADDR_REQUEST");
+    rv = zmsg_addstr(msg_req, "DIADDR_REQUEST");
     assert(rv == 0);
     rv = zmsg_send(&msg_req, ctx->socket);
     if (rv != 0) {
-        err(ctx->log_ctx, "Unable to send ADDR_REQUEST request to host controller\n");
+        err(ctx->log_ctx, "Unable to send DIADDR_REQUEST request to host controller\n");
         return OSD_ERROR_CONNECTION_FAILED;
     }
 

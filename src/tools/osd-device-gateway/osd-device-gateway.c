@@ -168,7 +168,18 @@ static int send_to_device(zloop_t *loop, zsock_t *reader, void *arg)
         size_t data_size_words = zframe_size(data_frame) / sizeof(uint16_t);
         assert(data);
 
-        size_t size_words_written = device_write(data, data_size_words, 0);
+        size_t size_words_written;
+
+        // data is sent as Debug Transport Datagram (DTD) -- a length-value
+        // encoded version of the osd packet.
+
+        // length (in uint16_t words)
+        uint16_t dtd_size = data_size_words;
+        size_words_written = device_write(&dtd_size, 1, 0);
+        assert(size_words_written == 1);
+
+        // value (the packet data)
+        size_words_written = device_write(data, data_size_words, 0);
         assert(size_words_written == data_size_words);
 
     } else if (zframe_streq(type_frame, "M")) {

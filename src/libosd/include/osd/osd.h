@@ -101,58 +101,6 @@ struct osd_version {
 };
 
 /**
- * A packet in the Open SoC Debug system
- */
-// We must use zero-length data members (a GCC extension) instead of standard C
-// flexible arrays (uint16_t payload[]) as flexible array members are not
-// allowed in unions by the C standard.
-struct osd_packet {
-    uint16_t size_data; //!< size of data (or data_raw) in uint16_t words
-    union {
-        struct {
-            uint16_t dest;       //!< packet destination address
-            uint16_t src;        //!< packet source address
-            uint16_t flags;      //!< packet flags
-            uint16_t payload[0]; //!< (size_data - 3) words of payload
-        } data;
-
-        uint16_t data_raw[0];    //!< size_data words of data
-    };
-};
-
-/**
- * Packet types
- */
-enum osd_packet_type {
-    OSD_PACKET_TYPE_REG = 0,   //< Register access
-    OSD_PACKET_TYPE_PLAIN = 1, //< Plain (unspecified content)
-    OSD_PACKET_TYPE_EVENT = 2, //< Debug Event
-    OSD_PACKET_TYPE_RES = 3    //< Reserved (will be discarded)
-};
-
-/**
- * Values of the TYPE_SUB field in if TYPE == OSD_PACKET_TYPE_REG
- */
-enum osd_packet_type_reg_subtype {
-    REQ_READ_REG_16 = 0b0000,           //< 16 bit register read request
-    REQ_READ_REG_32 = 0b0001,           //< 32 bit register read request
-    REQ_READ_REG_64 = 0b0010,           //< 64 bit register read request
-    REQ_READ_REG_128 = 0b0011,          //< 128 bit register read request
-    RESP_READ_REG_SUCCESS_16 = 0b1000,  //< 16 bit register read response
-    RESP_READ_REG_SUCCESS_32 = 0b1001,  //< 32 bit register read response
-    RESP_READ_REG_SUCCESS_64 = 0b1010,  //< 64 bit register read response
-    RESP_READ_REG_SUCCESS_128 = 0b1011, //< 128 bit register read response
-    RESP_READ_REG_ERROR = 0b1100,       //< register read failure
-    REQ_WRITE_REG_16 = 0b0100,          //< 16 bit register write request
-    REQ_WRITE_REG_32 = 0b0101,          //< 32 bit register write request
-    REQ_WRITE_REG_64 = 0b0110,          //< 64 bit register write request
-    REQ_WRITE_REG_128 = 0b0111,         //< 128 bit register write request
-    RESP_WRITE_REG_SUCCESS = 0b1110,    //< the preceding write request was
-                                        //  successful
-    RESP_WRITE_REG_ERROR = 0b1111       //< the preceding write request failed
-};
-
-/**
  * Module type identifiers for the standard-defined modules (vendor id 0x01)
  */
 enum osd_module_type {
@@ -173,16 +121,19 @@ struct osd_module_desc {
     uint16_t version; //!< Module version
 };
 
-// Module addresses defined by the OSD spec
-#define OSD_MOD_ADDR_HIM (17 | (1<<10))  /* subnet *///< Address of the Host Interface Module
-#define OSD_MOD_ADDR_SCM 0 //< Address of the System Control Module
-
 const struct osd_version * osd_version_get(void);
 
-#define OSD_SUBNET_BITS 9
+/**
+ * Number of bits in the address used to describe the subnet
+ */
+#define OSD_DIADDR_SUBNET_BITS 6
+#define OSD_DIADDR_LOCAL_BITS (16 - OSD_DIADDR_SUBNET_BITS)
+#define OSD_DIADDR_SUBNET_MAX ((1 << OSD_DIADDR_SUBNET_BITS) - 1)
+#define OSD_DIADDR_LOCAL_MAX ((1 << OSD_DIADDR_LOCAL_BITS) - 1)
 
-unsigned int osd_addr_subnet(unsigned int addr);
-unsigned int osd_addr_localaddr(unsigned int addr);
+unsigned int osd_diaddr_subnet(unsigned int diaddr);
+unsigned int osd_diaddr_localaddr(unsigned int diaddr);
+unsigned int osd_diaddr_build(unsigned int subnet, unsigned int local_diaddr);
 
 #ifdef __cplusplus
 }

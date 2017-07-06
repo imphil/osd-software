@@ -3,18 +3,19 @@
  */
 
 #include <osd/osd.h>
+#include <osd/packet.h>
 #include "osd-private.h"
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
 
-#include "packet.h"
 
 #define MACROSTR(k) #k
 
 /**
  * Get the data size including all headers for a given payload size
  */
+API_EXPORT
 const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_payload)
 {
     unsigned int s = size_payload + 3 /* dest, src, flags */;
@@ -31,15 +32,15 @@ const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_pay
  * @param[in]  size_data number of uint16_t words in the packet
  * @return the allocated packet, or NULL if allocation fails
  */
-osd_result osd_packet_new(struct osd_packet **packet,
-                          const unsigned int size_data)
+API_EXPORT
+osd_result osd_packet_new(struct osd_packet **packet, size_t size_data_words)
 {
     ssize_t size = sizeof(uint16_t) * 1            // osd_packet.size_data
-                   + sizeof(uint16_t) * size_data; // osd_packet.data
+                   + sizeof(uint16_t) * size_data_words; // osd_packet.data
     struct osd_packet *pkg = calloc(1, size);
     assert(pkg);
 
-    pkg->size_data = size_data;
+    pkg->size_data = size_data_words;
 
     *packet = pkg;
 
@@ -49,6 +50,7 @@ osd_result osd_packet_new(struct osd_packet **packet,
 /**
  * Free the memory associated with the packet
  */
+API_EXPORT
 void osd_packet_free(struct osd_packet *packet)
 {
     free(packet);
@@ -57,6 +59,7 @@ void osd_packet_free(struct osd_packet *packet)
 /**
  * Extract the DEST field out of a packet
  */
+API_EXPORT
 unsigned int osd_packet_get_dest(const struct osd_packet *packet)
 {
     return (packet->data.dest >> DP_HEADER_DEST_SHIFT)
@@ -66,6 +69,7 @@ unsigned int osd_packet_get_dest(const struct osd_packet *packet)
 /**
  * Extract the SRC field out of a packet
  */
+API_EXPORT
 unsigned int osd_packet_get_src(const struct osd_packet *packet)
 {
     return (packet->data.src >> DP_HEADER_SRC_SHIFT)
@@ -75,6 +79,7 @@ unsigned int osd_packet_get_src(const struct osd_packet *packet)
 /**
  * Extract the TYPE field out of a packet
  */
+API_EXPORT
 unsigned int osd_packet_get_type(const struct osd_packet *packet)
 {
     return (packet->data.flags >> DP_HEADER_TYPE_SHIFT)
@@ -84,6 +89,7 @@ unsigned int osd_packet_get_type(const struct osd_packet *packet)
 /**
  * Extract the TYPE_SUB field out of a packet
  */
+API_EXPORT
 unsigned int osd_packet_get_type_sub(const struct osd_packet *packet)
 {
     return (packet->data.flags >> DP_HEADER_TYPE_SUB_SHIFT)
@@ -101,6 +107,7 @@ unsigned int osd_packet_get_type_sub(const struct osd_packet *packet)
  *
  * @return OSD_OK on success, any other value indicates an error
  */
+API_EXPORT
 osd_result osd_packet_set_header(struct osd_packet* packet,
                                  const unsigned int dest,
                                  const unsigned int src,
@@ -137,6 +144,7 @@ osd_result osd_packet_set_header(struct osd_packet* packet,
 /**
  * Size in bytes of a packet
  */
+API_EXPORT
 size_t osd_packet_sizeof(struct osd_packet *packet)
 {
     return packet->size_data * sizeof(uint16_t);
@@ -145,6 +153,7 @@ size_t osd_packet_sizeof(struct osd_packet *packet)
 /**
  * Write a debug message to the log with the contents of a packet
  */
+API_EXPORT
 void osd_packet_log(const struct osd_packet *packet,
                     struct osd_log_ctx *log_ctx)
 {
