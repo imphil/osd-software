@@ -3,8 +3,6 @@
  */
 
 #include <osd/osd.h>
-#include <osd/com.h>
-
 #include "../cli-util.h"
 
 #include <libglip.h>
@@ -13,6 +11,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <byteswap.h>
+#include <src/libosd/include/osd/hostmod.h>
 #include <zmq.h>
 
 /**

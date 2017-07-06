@@ -3,7 +3,6 @@
  */
 
 #include <osd/osd.h>
-#include <osd/com.h>
 #include "osd-private.h"
 #include <assert.h>
 #include <errno.h>
@@ -16,7 +15,7 @@
 /**
  * Get the data size including all headers for a given payload size
  */
-static const uint16_t get_size_data_from_payload(const unsigned int size_payload)
+const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_payload)
 {
     unsigned int s = size_payload + 3 /* dest, src, flags */;
     assert(s <= UINT16_MAX);
@@ -29,14 +28,12 @@ static const uint16_t get_size_data_from_payload(const unsigned int size_payload
  * The osd_packet.size field is set to the allocated size.
  *
  * @param[out] packet the packet to be allocated
- * @param[in]  size_payload number of uint16_t payload words in
- *                          osd_packet.data.payload
+ * @param[in]  size_data number of uint16_t words in the packet
  * @return the allocated packet, or NULL if allocation fails
  */
 osd_result osd_packet_new(struct osd_packet **packet,
-                          const unsigned int size_payload)
+                          const unsigned int size_data)
 {
-    uint16_t size_data =  get_size_data_from_payload(size_payload);
     ssize_t size = sizeof(uint16_t) * 1            // osd_packet.size_data
                    + sizeof(uint16_t) * size_data; // osd_packet.data
     struct osd_packet *pkg = calloc(1, size);

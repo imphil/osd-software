@@ -25,23 +25,16 @@
  *   Stefan Wallentowitz <stefan@wallentowitz.de>
  */
 
-#include <osd/osd.h>
-#include <osd/com.h>
 
+#include <osd/osd.h>
+#include <osd/hostmod.h>
 #include "osd-private.h"
-#include "com-private.h"
 #include "packet.h"
 
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
-
-/**
- * @defgroup libosd-com Communication Library
- * @ingroup libosd
- *
- * @{
- */
+#include "hostmod-private.h"
 
 /** Timeout when accessing debug registers (in ns) */
 #define REG_ACCESS_TIMEOUT_NS (1*1000*1000*1000) // 1 s
@@ -49,26 +42,51 @@
 /** Debugging aid: log all sent and received packets */
 #define LOG_TRANSMITTED_PACKETS 1
 
+static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
+                                          struct osd_packet *packet)
+{
+    int rv;
+    zmsg_t *msg = zmsg_new();
+    assert(msg);
+
+    rv = zmsg_addstr(msg, "D");
+    assert(rv == 0);
+    dbg(ctx->log_ctx, "siez: %d\n", packet->size_data);
+    rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
+    assert(rv == 0);
+
+    zmsg_print(msg);
+    rv = zmsg_send(&msg, ctx->socket);
+
+    if (rv == 0) {
+        return OSD_OK;
+    } else {
+        return OSD_ERROR_COM;
+    }
+
+    return OSD_OK;
+}
+
 /**
  * Read the system information from the device, as stored in the SCM
  */
-static osd_result read_system_info_from_device(struct osd_com_ctx *ctx)
+static osd_result read_system_info_from_device(struct osd_hostmod_ctx *ctx)
 {
     osd_result rv;
 
-    rv = osd_com_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_SYSTEM_VENDOR_ID, 16,
+    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_SYSTEM_VENDOR_ID, 16,
                           &ctx->system_info.vendor_id, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read VENDOR_ID from SCM (rv=%d)\n", rv);
         return rv;
     }
-    rv = osd_com_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_SYSTEM_DEVICE_ID, 16,
+    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_SYSTEM_DEVICE_ID, 16,
                           &ctx->system_info.device_id, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read DEVICE_ID from SCM (rv=%d)\n", rv);
         return rv;
     }
-    rv = osd_com_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_MAX_PKT_LEN, 16,
+    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_MAX_PKT_LEN, 16,
                           &ctx->system_info.max_pkt_len, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read MAX_PKT_LEN from SCM (rv=%d)\n", rv);
@@ -82,7 +100,7 @@ static osd_result read_system_info_from_device(struct osd_com_ctx *ctx)
     return OSD_OK;
 }
 
-static osd_result discover_debug_module(struct osd_com_ctx *ctx,
+static osd_result discover_debug_module(struct osd_hostmod_ctx *ctx,
                                         uint16_t module_addr)
 {
     assert(module_addr < ctx->modules_len);
@@ -93,19 +111,19 @@ static osd_result discover_debug_module(struct osd_com_ctx *ctx,
 
     desc->addr = module_addr;
 
-    rv = osd_com_reg_read(ctx, module_addr, REG_BASE_MOD_TYPE, 16,
+    rv = osd_hostmod_reg_read(ctx, module_addr, REG_BASE_MOD_TYPE, 16,
                           &desc->type, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
-    rv = osd_com_reg_read(ctx, module_addr, REG_BASE_MOD_VENDOR, 16,
+    rv = osd_hostmod_reg_read(ctx, module_addr, REG_BASE_MOD_VENDOR, 16,
                           &desc->vendor, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
-    rv = osd_com_reg_read(ctx, module_addr, REG_BASE_MOD_VERSION, 16,
+    rv = osd_hostmod_reg_read(ctx, module_addr, REG_BASE_MOD_VERSION, 16,
                           &desc->version, 0);
     if (OSD_FAILED(rv)) {
         return rv;
@@ -119,12 +137,12 @@ static osd_result discover_debug_module(struct osd_com_ctx *ctx,
  *
  * @return OSD_ENUMERATION_INCOMPLETE if at least one module failed to enumerate
  */
-static osd_result enumerate_debug_modules(struct osd_com_ctx *ctx)
+static osd_result enumerate_debug_modules(struct osd_hostmod_ctx *ctx)
 {
     osd_result ret = OSD_OK;
     osd_result rv;
     uint16_t num_modules;
-    rv = osd_com_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_NUM_MOD, 16,
+    rv = osd_hostmod_reg_read(ctx, OSD_MOD_ADDR_SCM, REG_SCM_NUM_MOD, 16,
                           &num_modules, 0);
     if (OSD_FAILED(rv)) {
         err(ctx->log_ctx, "Unable to read NUM_MOD from SCM\n");
@@ -154,6 +172,7 @@ static osd_result enumerate_debug_modules(struct osd_com_ctx *ctx)
 }
 
 
+#if 0
 /**
  * Get the size of the Debug Transport Datagram in words
  */
@@ -208,7 +227,7 @@ osd_result osd_dtd_to_packet(osd_dtd dtd, struct osd_packet** packet)
  * @param packet debug packet to be transmitted
  * @return OSD_OK if sending was successful, any other value indicates an error
  */
-static osd_result osd_com_send_packet(struct osd_com_ctx *ctx,
+static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
                                       struct osd_packet *packet)
 {
     assert(ctx->device_ctrl_if->write);
@@ -240,77 +259,95 @@ static osd_result osd_com_send_packet(struct osd_com_ctx *ctx,
 
     return OSD_OK;
 }
+#endif
 
+static void handle_incoming_di_packet(struct osd_hostmod_ctx *ctx,
+                                      struct osd_packet* packet)
+{
+#if LOG_TRANSMITTED_PACKETS
+    dbg(ctx->log_ctx, "Received new packet\n");
+    osd_packet_log(packet, ctx->log_ctx);
+#endif
+
+    switch (osd_packet_get_type(packet)) {
+    case OSD_PACKET_TYPE_REG:
+        pthread_mutex_lock(&ctx->reg_access_lock);
+        // the previous control request must be handled by now
+        assert(ctx->rcv_ctrl_packet == NULL);
+        ctx->rcv_ctrl_packet = packet;
+        pthread_cond_signal(&ctx->reg_access_complete);
+        pthread_mutex_unlock(&ctx->reg_access_lock);
+        break;
+    case OSD_PACKET_TYPE_EVENT:
+        // XXX: forward to appropriate handler
+        break;
+    case OSD_PACKET_TYPE_PLAIN:
+        // PLAIN packets should only be sent out, not received (as of now)
+    case OSD_PACKET_TYPE_RES:
+        // must be ignored by spec
+    default:
+        // Should never be reached.
+        assert(0);
+    }
+}
+
+static int rcv_msg(zloop_t *loop, zsock_t *reader, void *ctx_void)
+{
+    struct osd_hostmod_ctx* ctx = (struct osd_hostmod_ctx*)ctx_void;
+
+    zmsg_t *msg = zmsg_recv(reader);
+    if (!msg) {
+        return -1; // process interrupted
+    }
+
+    zframe_t *type_frame = zmsg_pop(msg);
+    if (zframe_streq(type_frame, "D")) {
+
+        zframe_t *data_frame = zmsg_pop(msg);
+        assert(data_frame);
+        uint16_t *data = (uint16_t*)zframe_data(data_frame);
+        size_t data_size_words = zframe_size(data_frame) / sizeof(uint16_t);
+        assert(data);
+
+        struct osd_packet *packet;
+        osd_packet_new(&packet, data_size_words);
+
+        handle_incoming_di_packet(ctx, packet);
+
+    } else if (zframe_streq(type_frame, "M")) {
+        // TODO: handle incoming management messages
+        err(ctx->log_ctx, "XXX: management messages are not yet handled by this client.\n");
+        goto ret;
+
+    } else {
+        err(ctx->log_ctx, "Message of unknown type received. Ignoring.\n");
+        goto ret;
+    }
+
+ret:
+    zmsg_destroy(&msg);
+    return 0;
+}
 /**
  * Read data from the device encoded as Debug Transport Datagrams (DTDs)
  */
 static void* thread_ctrl_receive(void *ctx_void)
 {
-    struct osd_com_ctx *ctx = (struct osd_com_ctx*) ctx_void;
+    struct osd_hostmod_ctx *ctx = (struct osd_hostmod_ctx*) ctx_void;
     ssize_t rv;
 
-    assert(ctx->device_ctrl_if->read);
+    // ingress data path
+    zloop_t* rx_zloop = zloop_new();
+    zloop_set_verbose(rx_zloop, 1);
+    rv = zloop_reader(rx_zloop, ctx->socket, rcv_msg, ctx);
+    assert(rv == 0);
+    zloop_reader_set_tolerant(rx_zloop, ctx->socket);
+    ctx->rx_zloop = rx_zloop;
 
-    while (1) {
-        // read packet size, which is transmitted as first word in a DTD
-        uint16_t pkg_size_words;
-        rv = ctx->device_ctrl_if->read(&pkg_size_words, 1, 0);
-        if (rv != 1) {
-            err(ctx->log_ctx, "Unable to receive data from device. "
-                "Aborting.\n");
-            return NULL;
-        }
+    // start event loop -- takes over thread
+    zloop_start(ctx->rx_zloop);
 
-        // allocate buffer for the to-be-received packet
-        assert(pkg_size_words >= 3);
-        // we have three header words (DP_HEADER_{1-3}, everything
-        // else is payload
-        unsigned int pacload_size = pkg_size_words - 3;
-        struct osd_packet *packet;
-        osd_packet_new(&packet, pacload_size);
-
-
-        // read packet of |pkg_size| words from device
-        rv = ctx->device_ctrl_if->read(packet->data_raw, pkg_size_words, 0);
-        if (rv < 0) {
-            // XXX: Figure out suitable handling of this error case
-            err(ctx->log_ctx, "Error while receiving data from device. "
-                    "Aborting.\n");
-            assert(0);
-        }
-        if ((size_t)rv != pkg_size_words) {
-            // XXX: Figure out suitable handling of this error case
-            err(ctx->log_ctx, "Received too little data from device. This "
-                "should not have happened. Aborting.");
-            assert(0);
-        }
-
-#if LOG_TRANSMITTED_PACKETS
-        dbg(ctx->log_ctx, "Received new packet\n");
-        osd_packet_log(packet, ctx->log_ctx);
-#endif
-
-        switch (osd_packet_get_type(packet)) {
-        case OSD_PACKET_TYPE_REG:
-            pthread_mutex_lock(&ctx->reg_access_lock);
-            // the previous control request must be handled by now
-            assert(ctx->rcv_ctrl_packet == NULL);
-            ctx->rcv_ctrl_packet = packet;
-            pthread_cond_signal(&ctx->reg_access_complete);
-            pthread_mutex_unlock(&ctx->reg_access_lock);
-            break;
-        case OSD_PACKET_TYPE_EVENT:
-            // XXX: forward to appropriate handler
-            break;
-        case OSD_PACKET_TYPE_PLAIN:
-            // PLAIN packets should only be sent out, not received (as of now)
-        case OSD_PACKET_TYPE_RES:
-            // must be ignored by spec
-        default:
-            // Should never be reached.
-            assert(0);
-        }
-    }
+    return NULL;
 }
 
 /**
@@ -320,12 +357,13 @@ static void* thread_ctrl_receive(void *ctx_void)
  * @param[in] log_ctx the log context to be used. Set to NULL to disable logging
  * @return OSD_OK on success, any other value indicates an error
  *
- * @see osd_com_free()
+ * @see osd_hostmod_free()
  */
 API_EXPORT
-osd_result osd_com_new(struct osd_com_ctx **ctx, struct osd_log_ctx *log_ctx)
+osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
+                           struct osd_log_ctx *log_ctx)
 {
-    struct osd_com_ctx *c = calloc(1, sizeof(struct osd_com_ctx));
+    struct osd_hostmod_ctx *c = calloc(1, sizeof(struct osd_hostmod_ctx));
     assert(c);
 
     pthread_mutex_init(&c->reg_access_lock, 0);
@@ -338,26 +376,69 @@ osd_result osd_com_new(struct osd_com_ctx **ctx, struct osd_log_ctx *log_ctx)
     return OSD_OK;
 }
 
+API_EXPORT
+uint16_t osd_hostmod_get_addr(struct osd_hostmod_ctx *ctx)
+{
+    assert(ctx->is_connected);
+    return ctx->addr;
+}
+
 /**
- * Connect to the device
- *
- * Before calling this function, make sure that the setup is complete:
- * - Use osd_com_set_device_ctrl_if() to connect the control interface to the
- *   device.
- * - Use osd_com_set_device_event_if() to connect the event interface to the
- *   device.
+ * Connect to the host controller
  *
  * @param ctx the osd_com context object
  * @return OSD_OK on success, any other value indicates an error
  *
- * @see osd_com_disconnect()
+ * @see osd_hostmod_disconnect()
  */
-osd_result osd_com_connect(struct osd_com_ctx *ctx)
+osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
+                               char* host_controller_address)
 {
+    int rv;
     assert(ctx->is_connected == 0);
 
+    zsock_t *sock = zsock_new_dealer(host_controller_address);
+    if (!sock) {
+        err(ctx->log_ctx, "Unable to connect to %s\n", host_controller_address);
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
+    ctx->socket = sock;
+
+    // get address for this host module
+    // request
+    zmsg_t *msg_req = zmsg_new();
+    assert(msg_req);
+
+    rv = zmsg_addstr(msg_req, "M");
+    assert(rv == 0);
+    rv = zmsg_addstr(msg_req, "ADDR_REQUEST");
+    assert(rv == 0);
+    rv = zmsg_send(&msg_req, ctx->socket);
+    if (rv != 0) {
+        err(ctx->log_ctx, "Unable to send ADDR_REQUEST request to host controller\n");
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
+
+    // response
+    zmsg_t *msg_resp = zmsg_recv(sock);
+    if (!msg_resp) {
+        err(ctx->log_ctx, "No response received from host controller\n");
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
+
+    zframe_t *type_frame = zmsg_pop(msg_resp);
+    assert(zframe_streq(type_frame, "M"));
+
+    char* addr_string = zmsg_popstr(msg_resp);
+    assert(addr_string);
+
+    char* end;
+    int addr = strtol(addr_string, &end, 10);
+    assert(!*end);
+    assert(addr < UINT16_MAX);
+    ctx->addr = (uint16_t) addr;
+
     // set up thread_ctrl_receive
-    int rv;
     rv = pthread_create(&ctx->thread_ctrl_receive, 0,
                         thread_ctrl_receive, (void*)ctx);
     if (rv) {
@@ -367,12 +448,7 @@ osd_result osd_com_connect(struct osd_com_ctx *ctx)
 
     ctx->is_connected = 1;
 
-    // retrieve system information
-    osd_result osd_rv;
-    osd_rv = read_system_info_from_device(ctx);
-    if (OSD_FAILED(osd_rv)) {
-        return osd_rv;
-    }
+    read_system_info_from_device(ctx);
 
     return OSD_OK;
 }
@@ -383,11 +459,11 @@ osd_result osd_com_connect(struct osd_com_ctx *ctx)
  * @param ctx the osd_com context object
  * @return 1 if connected, 0 if not connected
  *
- * @see osd_com_connect()
- * @see osd_com_disconnect()
+ * @see osd_hostmod_connect()
+ * @see osd_hostmod_disconnect()
  */
 API_EXPORT
-int osd_com_is_connected(struct osd_com_ctx *ctx)
+int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
 {
     return ctx->is_connected;
 }
@@ -398,9 +474,9 @@ int osd_com_is_connected(struct osd_com_ctx *ctx)
  * @param ctx the osd_com context object
  * @return OSD_OK on success, any other value indicates an error
  *
- * @see osd_com_run()
+ * @see osd_hostmod_run()
  */
-osd_result osd_com_disconnect(struct osd_com_ctx *ctx)
+osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
 {
     if (!ctx->is_connected) {
         return OSD_ERROR_NOT_CONNECTED;
@@ -408,9 +484,13 @@ osd_result osd_com_disconnect(struct osd_com_ctx *ctx)
 
     ctx->is_connected = 0;
 
+    zloop_destroy(&ctx->rx_zloop);
+
     void *status;
     pthread_cancel(ctx->thread_ctrl_receive);
     pthread_join(ctx->thread_ctrl_receive, &status);
+
+    zsock_destroy(&ctx->socket);
 
     return OSD_OK;
 }
@@ -418,89 +498,18 @@ osd_result osd_com_disconnect(struct osd_com_ctx *ctx)
 /**
  * Free a communication API context object
  *
- * Call osd_com_disconnect() before calling this function.
+ * Call osd_hostmod_disconnect() before calling this function.
  *
  * @param ctx the osd_com context object
  */
 API_EXPORT
-void osd_com_free(struct osd_com_ctx *ctx)
+void osd_hostmod_free(struct osd_hostmod_ctx *ctx)
 {
     assert(ctx->is_connected == 0);
 
     pthread_mutex_destroy(&ctx->reg_access_lock);
 
     free(ctx);
-}
-
-/**
- * Get a list of all Open SoC Debug modules present in the device
- *
- * @param ctx the osd_com context object
- * @param modules all modules available in the system
- * @param modules_len number of modules available in the system
- *
- * @return OSD_OK on success, any other value indicates an error
- */
-API_EXPORT
-osd_result osd_com_get_modules(struct osd_com_ctx *ctx,
-                               struct osd_module_desc **modules,
-                               size_t *modules_len)
-{
-    if (!ctx->is_connected) {
-        return OSD_ERROR_NOT_CONNECTED;
-    }
-
-    if (!ctx->modules) {
-        osd_result rv = enumerate_debug_modules(ctx);
-        if (OSD_FAILED(rv)) {
-            return rv;
-        }
-    }
-
-    *modules = ctx->modules;
-    *modules_len = ctx->modules_len;
-
-    return OSD_OK;
-}
-
-/**
- * Set the descriptor to communicate with the control interface of the target
- * device
- *
- * Calling this function is not possible during an active connection.
- *
- * @param ctx the osd_com context object
- * @param ctrl_if device descriptor
- *
- * @return OSD_OK on success, any other value indicates an error
- */
-API_EXPORT
-osd_result osd_com_set_device_ctrl_if(struct osd_com_ctx *ctx,
-                                      struct osd_com_device_if *ctrl_if)
-{
-    assert(!ctx->is_connected);
-    ctx->device_ctrl_if = ctrl_if;
-    return OSD_OK;
-}
-
-/**
- * Set the descriptor to communicate with the event interface of the target
- * device
- *
- * Calling this function is not possible during an active connection.
- *
- * @param ctx the osd_com context object
- * @param event_if device descriptor
- *
- * @return OSD_OK on success, any other value indicates an error
- */
-API_EXPORT
-osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
-                                       struct osd_com_device_if *event_if)
-{
-    assert(!ctx->is_connected);
-    ctx->device_event_if = event_if;
-    return OSD_OK;
 }
 
 /**
@@ -523,10 +532,10 @@ osd_result osd_com_set_device_event_if(struct osd_com_ctx *ctx,
  *         OSD_COM_WAIT_FOREVER is not set)
  */
 API_EXPORT
-osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
-                            const unsigned int module_addr,
-                            const uint16_t reg_addr, const int reg_size_bit,
-                            void *result, const int flags)
+osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
+                                const unsigned int module_addr,
+                                const uint16_t reg_addr, const int reg_size_bit,
+                                void *result, const int flags)
 {
     if (!ctx->is_connected) {
         return OSD_ERROR_NOT_CONNECTED;
@@ -570,9 +579,6 @@ osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
         }
     }
 
-    // |flags| is currently unused
-    assert(flags == 0);
-
     // determine type_sub
     enum osd_packet_type_reg_subtype type_sub;
     switch (reg_size_bit) {
@@ -594,19 +600,20 @@ osd_result osd_com_reg_read(struct osd_com_ctx *ctx,
 
     // assemble request packet
     struct osd_packet *pkg_read_req;
-    rv = osd_packet_new(&pkg_read_req, 1);
+    rv = osd_packet_new(&pkg_read_req,
+                        osd_packet_get_size_data_from_payload(1));
     if (OSD_FAILED(rv)) {
         ret = rv;
         goto err_free_req;
     }
 
-    osd_packet_set_header(pkg_read_req, module_addr, OSD_MOD_ADDR_HIM,
+    osd_packet_set_header(pkg_read_req, module_addr, ctx->addr,
                           OSD_PACKET_TYPE_REG, type_sub);
     pkg_read_req->data.payload[0] = reg_addr;
 
 
     // send register read request
-    rv = osd_com_send_packet(ctx, pkg_read_req);
+    rv = osd_hostmod_send_packet(ctx, pkg_read_req);
     if (OSD_FAILED(rv)) {
         ret = rv;
         goto err_free_req;
@@ -699,5 +706,3 @@ err_unlock:
 
     return ret;
 }
-
-/**@}*/ /* end of doxygen group libosd-com */

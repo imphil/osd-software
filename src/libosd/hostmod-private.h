@@ -16,17 +16,20 @@ struct osd_system_info {
 /**
  * Communication context
  */
-struct osd_com_ctx {
+struct osd_hostmod_ctx {
     /** Is the library connected to a device? */
     int is_connected;
 
     /** Logging context */
     struct osd_log_ctx *log_ctx;
 
-    /** Control interface (from/to the device) */
-    struct osd_com_device_if *device_ctrl_if;
-    /** Event interface (from/to the device) */
-    struct osd_com_device_if *device_event_if;
+    uint16_t addr;
+
+    /** communication socket to the host controller */
+    zsock_t *socket;
+
+    /** receive zloop */
+    zloop_t *rx_zloop;
 
     /** Control data receive thread */
     pthread_t thread_ctrl_receive;
@@ -46,10 +49,6 @@ struct osd_com_ctx {
     size_t modules_len;
 };
 
-
-
-struct osd_com_client {
-};
 
 /**
  * Debug Transport Datagram

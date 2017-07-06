@@ -14,7 +14,7 @@
 #define DP_HEADER_DEST_SHIFT     0
 #define DP_HEADER_DEST_MASK      ((1 << 16) - 1)
 
-
+const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_payload);
 osd_result osd_packet_new(struct osd_packet **packet,
                           const unsigned int size_payload);
 void osd_packet_free(struct osd_packet *packet);

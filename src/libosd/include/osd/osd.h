@@ -37,6 +37,8 @@ typedef int osd_result;
 #define OSD_ERROR_ENUMERATION_INCOMPLETE -7
 /** Return code: operation aborted */
 #define OSD_ERROR_ABORTED -8
+/** Return code: connection failed */
+#define OSD_ERROR_CONNECTION_FAILED -9
 /** Return code: Out of memory */
 #define OSD_ERROR_OOM -11
 
@@ -176,6 +178,11 @@ struct osd_module_desc {
 #define OSD_MOD_ADDR_SCM 0 //< Address of the System Control Module
 
 const struct osd_version * osd_version_get(void);
+
+#define OSD_SUBNET_BITS 9
+
+unsigned int osd_addr_subnet(unsigned int addr);
+unsigned int osd_addr_localaddr(unsigned int addr);
 
 #ifdef __cplusplus
 }

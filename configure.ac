@@ -163,6 +163,7 @@ AM_CFLAGS="-Wall \
     -ffunction-sections \
     -fdata-sections \
     -pthread \
+    $libczmq_CFLAGS \
     $CODE_COVERAGE_CFLAGS"
 AC_SUBST([AM_CFLAGS])
 
@@ -170,6 +171,7 @@ AM_LDFLAGS="-Wl,--gc-sections \
     -Wl,--as-needed \
     -pthread \
     -lrt \
+    $libczmq_LIBS \
     $CODE_COVERAGE_LIBS"
 AC_SUBST(AM_LDFLAGS)
 

@@ -8,7 +8,7 @@
 #include "../cli-util.h"
 #include <czmq.h>
 #include <byteswap.h>
-#include <osd/com.h>
+#include "../../libosd/include/osd/hostmod.h"
 #include <libglip.h>
 
 /**
@@ -63,15 +63,9 @@ static ssize_t device_read(uint16_t *buf, size_t size_words, int flags)
     buf_be = buf;
 #endif
 
-    if (flags & OSD_COM_NONBLOCK) {
-        rv = glip_read(glip_ctx, 0,
-                       size_words * sizeof(uint16_t), (uint8_t*)buf_be,
-                       &bytes_read);
-    } else {
-        rv = glip_read_b(glip_ctx, 0,
-                         size_words * sizeof(uint16_t), (uint8_t*)buf_be,
-                         &bytes_read, 0 /* timeout [ms]; 0 == never */);
-    }
+    rv = glip_read_b(glip_ctx, 0,
+                     size_words * sizeof(uint16_t), (uint8_t*)buf_be,
+                     &bytes_read, 0 /* timeout [ms]; 0 == never */);
     if (rv != 0) {
         return -1;
     }
@@ -107,13 +101,8 @@ static ssize_t device_write(uint16_t *buf, size_t size_words, int flags)
     buf_be = buf;
 #endif
 
-    if (flags & OSD_COM_NONBLOCK) {
-        rv = glip_write(glip_ctx, 0, size_words * sizeof(uint16_t), (uint8_t*)buf_be,
-                        &bytes_written);
-    } else {
-        rv = glip_write_b(glip_ctx, 0, size_words * sizeof(uint16_t), (uint8_t*)buf_be,
-                          &bytes_written, 0 /* timeout [ms]; 0 == never */);
-    }
+    rv = glip_write_b(glip_ctx, 0, size_words * sizeof(uint16_t), (uint8_t*)buf_be,
+                      &bytes_written, 0 /* timeout [ms]; 0 == never */);
     if (rv != 0) {
         return -1;
     }
@@ -171,6 +160,7 @@ static int send_to_device(zloop_t *loop, zsock_t *reader, void *arg)
 
     zframe_t *type_frame = zmsg_pop(msg);
     if (zframe_streq(type_frame, "D")) {
+        dbg("Forwarding data message to device\n");
 
         zframe_t *data_frame = zmsg_pop(msg);
         assert(data_frame);
@@ -179,7 +169,7 @@ static int send_to_device(zloop_t *loop, zsock_t *reader, void *arg)
         assert(data);
 
         size_t size_words_written = device_write(data, data_size_words, 0);
-        assert(size_words_written != data_size_words);
+        assert(size_words_written == data_size_words);
 
     } else if (zframe_streq(type_frame, "M")) {
         // TODO: handle incoming management messages
@@ -205,7 +195,7 @@ static osd_result osd_hostcom_register_subnet_gw(unsigned int subnet)
 
     msg = zmsg_new();
     zmsg_addstrf(msg, "M");
-    zmsg_addstrf(msg, "REG_SUBNET_GW %d", subnet);
+    zmsg_addstrf(msg, "GW_REGISTER %u", subnet);
     zmsg_send(&msg, host_com_sock);
     zmsg_destroy(&msg);
 
@@ -231,6 +221,7 @@ static osd_result osd_hostcom_register_subnet_gw(unsigned int subnet)
 
     return OSD_OK;
 }
+
 /**
  * Read data from the device encoded as Debug Transport Datagrams (DTDs)
  */
@@ -262,7 +253,7 @@ static void* thread_ctrl_receive(void *unused)
         zmsg_send(&msg, host_com_sock);
         pthread_mutex_unlock(&host_com_sock_lock);
 
-        zmsg_destroy(&msg);
+        dbg("Received packet from device\n");
         free(pkg_data);
     }
 }
@@ -273,6 +264,7 @@ osd_result setup(void)
                               "GLIP backend name");
     a_glip_backend->sval[0] = GLIP_DEFAULT_BACKEND;
     osd_tool_add_arg(a_glip_backend);
+
     a_glip_backend_options = arg_str0(NULL, "glip-backend-options",
                                       "<option1=value1,option2=value2,...>",
                                       "GLIP backend options");

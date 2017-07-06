@@ -1,6 +1,4 @@
-#SUBDIRS = osd-systrace-log
-#SUBDIRS = osd-host-controller osd-device-gateway
-SUBDIRS = osd-device-gateway
+SUBDIRS = osd-device-gateway osd-host-controller osd-systrace-log
 
 #if ENABLE_DAEMON
 #SUBDIRS += osd-daemon

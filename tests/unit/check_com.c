@@ -1,12 +1,12 @@
 #include <check.h>
 
 #include <osd/osd.h>
-#include <osd/com.h>
-#include "../../src/libosd/com-private.h"
 #include "../../src/libosd/packet.h"
 
 #include <stdio.h>
 #include <unistd.h>
+#include "../../src/libosd/hostmod-private.h"
+#include "../../src/libosd/include/osd/hostmod.h"
 
 struct osd_com_ctx *com_ctx;
 
