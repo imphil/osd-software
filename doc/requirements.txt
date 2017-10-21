@@ -1,3 +1,4 @@
-Sphinx<1.6
+Sphinx
 breathe
 sphinx-rtd-theme
+sphinxcontrib-seqdiag
