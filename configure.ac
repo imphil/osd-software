@@ -72,6 +72,10 @@ AC_PROG_MKDIR_P
 # check unit testing framework
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.10])
 
+# test memory checking with valgrind
+AX_VALGRIND_DFLT([memcheck], [on])
+AX_VALGRIND_CHECK
+
 # test coverage with gcov and reporting with lcov
 AX_CODE_COVERAGE
 

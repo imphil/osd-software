@@ -2,7 +2,8 @@ check_PROGRAMS = \
 	check_log \
 	check_util \
 	check_packet \
-	check_com
+	check_hostmod
+#	check_com
 
 TESTS = $(check_PROGRAMS)
 
@@ -17,6 +18,12 @@ LDADD = \
 
 
 
-# Include make  targets to generate code coverage reports
+# Include make targets to generate code coverage reports
 CODE_COVERAGE_IGNORE_PATTERN = "/usr/*"
 @CODE_COVERAGE_RULES@
+
+# Include make targets to generate check targets with valgrind (check-valgrind)
+@VALGRIND_CHECK_RULES@
+VALGRIND_memcheck_FLAGS = --leak-check=full
+#VALGRIND_SUPPRESSIONS_FILES = my-project.supp
+#EXTRA_DIST = my-project.supp

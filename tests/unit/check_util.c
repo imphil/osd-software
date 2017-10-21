@@ -18,7 +18,7 @@ Suite * suite(void)
     Suite *s;
     TCase *tc_core;
 
-    s = suite_create("libosd-packet");
+    s = suite_create("libosd-util");
 
     /* Core test case */
     tc_core = tcase_create("Core");
