@@ -34,6 +34,7 @@ extensions = [
   'sphinx.ext.todo',
   'sphinx.ext.autodoc',
   'sphinx.ext.mathjax',
+  'sphinxcontrib.seqdiag',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -204,6 +205,10 @@ highlight_language = 'guess'
 # breathe_projects is set below to properly find the doxygen-generated xml file
 breathe_default_project = "osd-sw"
 breathe_domain_by_extension = {"h" : "c"}
+
+# seqdiag settings
+seqdiag_fontpath = '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf'
+seqdiag_antialias = True
 
 
 # -- Sphinx customizations -----------------------------------------------
