@@ -5,13 +5,20 @@ extern "C" {
 #endif
 
 /**
+ * @defgroup libosd-packet Packet
+ * @ingroup libosd
+ *
+ * @{
+ */
+
+/**
  * A packet in the Open SoC Debug system
  */
 // We must use zero-length data members (a GCC extension) instead of standard C
 // flexible arrays (uint16_t payload[]) as flexible array members are not
 // allowed in unions by the C standard.
 struct osd_packet {
-    uint16_t size_data; //!< size of data (or data_raw) in uint16_t words
+    uint16_t data_size_words; //!< size of data/data_raw in uint16_t words
     union {
         struct {
             uint16_t dest;       //!< packet destination address
@@ -70,7 +77,7 @@ enum osd_packet_type_reg_subtype {
 #define DP_HEADER_DEST_SHIFT     0
 #define DP_HEADER_DEST_MASK      ((1 << 16) - 1)
 
-const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_payload);
+const uint16_t osd_packet_get_data_size_words_from_payload(const unsigned int size_payload);
 osd_result osd_packet_new(struct osd_packet **packet,
                           size_t size_data_words);
 void osd_packet_free(struct osd_packet *packet);
@@ -87,6 +94,7 @@ size_t osd_packet_sizeof(struct osd_packet *packet);
 void osd_packet_log(const struct osd_packet *packet,
                     struct osd_log_ctx *log_ctx);
 
+/**@}*/ /* end of doxygen group libosd-packet */
 
 #ifdef __cplusplus
 }

@@ -241,8 +241,10 @@ int run(void)
     // allocate routing lookup tables
     // mods_in_subnet is 1024 * 8B = 8 kB
     mods_in_subnet = calloc(OSD_DIADDR_LOCAL_MAX + 1, sizeof(zframe_t*));
+    assert(mods_in_subnet);
     // gateways is 64 * 8B = 1 kB
     gateways = calloc(OSD_DIADDR_SUBNET_MAX + 1, sizeof(zframe_t*));
+    assert(gateways);
 
     while (!zsys_interrupted) {
         zmsg_t * msg = zmsg_recv(server_socket);

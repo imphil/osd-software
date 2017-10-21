@@ -67,7 +67,7 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx);
 int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx);
 
 osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
-                                const unsigned int module_addr,
+                                const uint16_t module_addr,
                                 const uint16_t reg_addr,
                                 const int reg_size_bit, void *result,
                                 const int flags);
@@ -79,5 +79,5 @@ uint16_t osd_hostmod_get_addr(struct osd_hostmod_ctx *ctx);
 #endif
 
 
-/**@}*/ /* end of doxygen group libosd-com */
+/**@}*/ /* end of doxygen group libosd-hostmod */
 

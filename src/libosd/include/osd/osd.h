@@ -16,6 +16,13 @@
 extern "C" {
 #endif
 
+/**
+ * @defgroup libosd-errorhandling Error handling
+ * @ingroup libosd
+ *
+ * @{
+ */
+
 /** Standard return type */
 typedef int osd_result;
 
@@ -52,6 +59,14 @@ typedef int osd_result;
  */
 #define OSD_SUCCEEDED(rv) ((rv) >= 0)
 
+/**@}*/ /* end of doxygen group libosd-errorhandling */
+
+/**
+ * @defgroup libosd-log Log
+ * @ingroup libosd
+ *
+ * @{
+ */
 
 /**
  * Opaque logging context
@@ -78,6 +93,8 @@ osd_result osd_log_get_priority(struct osd_log_ctx *ctx);
 void osd_log_set_priority(struct osd_log_ctx *ctx, int priority);
 void osd_log_set_caller_ctx(struct osd_log_ctx *ctx, void *caller_ctx);
 void* osd_log_get_caller_ctx(struct osd_log_ctx *ctx);
+
+/**@}*/ /* end of doxygen group libosd-log */
 
 
 /**

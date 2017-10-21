@@ -7,7 +7,7 @@
  *
  * We set compiler options to mark all functions as hidden by default, causing
  * them to be private to the library. If a function is part of the API, you
- * must explicitly mark it with this makro.
+ * must explicitly mark it with this macro.
  */
 #define API_EXPORT __attribute__ ((visibility("default")))
 

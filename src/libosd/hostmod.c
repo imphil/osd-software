@@ -51,16 +51,12 @@ static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
 
     rv = zmsg_addstr(msg, "D");
     assert(rv == 0);
-    dbg(ctx->log_ctx, "size: %d\n", packet->size_data);
+    dbg(ctx->log_ctx, "size: %d\n", packet->data_size_words);
     rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
     assert(rv == 0);
 
-    zmsg_print(msg);
     rv = zmsg_send(&msg, ctx->socket);
-
-    if (rv == 0) {
-        return OSD_OK;
-    } else {
+    if (rv != 0) {
         return OSD_ERROR_COM;
     }
 
@@ -201,7 +197,7 @@ size_t osd_dtd_get_size_words(osd_dtd dtd)
  */
 osd_result osd_packet_get_dtd(struct osd_packet *packet, osd_dtd *dtd)
 {
-    *dtd = &packet->size_data;
+    *dtd = &packet->data_size_words;
     return OSD_OK;
 }
 
@@ -357,9 +353,9 @@ static void* thread_ctrl_receive(void *ctx_void)
 }
 
 /**
- * Create new communication API object
+ * Create new osd_hostmod instance
  *
- * @param[out] ctx the osd_com context to be created
+ * @param[out] ctx the osd_hostmod_ctx context to be created
  * @param[in] log_ctx the log context to be used. Set to NULL to disable logging
  * @return OSD_OK on success, any other value indicates an error
  *
@@ -382,35 +378,30 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     return OSD_OK;
 }
 
+/**
+ * Get the DI address assigned to this host debug module
+ *
+ * The address is assigned during the connection, i.e. you need to call
+ * osd_hostmod_connect() before calling this function.
+ *
+ * @param ctx the osd_hostmod_ctx context object
+ * @return the address assigned to this debug module
+ */
 API_EXPORT
 uint16_t osd_hostmod_get_addr(struct osd_hostmod_ctx *ctx)
 {
+    assert(ctx);
     assert(ctx->is_connected);
     return ctx->addr;
 }
 
 /**
- * Connect to the host controller
- *
- * @param ctx the osd_com context object
- * @return OSD_OK on success, any other value indicates an error
- *
- * @see osd_hostmod_disconnect()
+ * Obtain a DI address for this host debug module from the host controller
  */
-osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
-                               char* host_controller_address)
+static osd_result obtain_diaddr(struct osd_hostmod_ctx *ctx)
 {
     int rv;
-    assert(ctx->is_connected == 0);
 
-    zsock_t *sock = zsock_new_dealer(host_controller_address);
-    if (!sock) {
-        err(ctx->log_ctx, "Unable to connect to %s\n", host_controller_address);
-        return OSD_ERROR_CONNECTION_FAILED;
-    }
-    ctx->socket = sock;
-
-    // get address for this host module
     // request
     zmsg_t *msg_req = zmsg_new();
     assert(msg_req);
@@ -426,7 +417,7 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
     }
 
     // response
-    zmsg_t *msg_resp = zmsg_recv(sock);
+    zmsg_t *msg_resp = zmsg_recv(ctx->socket);
     if (!msg_resp) {
         err(ctx->log_ctx, "No response received from host controller\n");
         return OSD_ERROR_CONNECTION_FAILED;
@@ -434,15 +425,45 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 
     zframe_t *type_frame = zmsg_pop(msg_resp);
     assert(zframe_streq(type_frame, "M"));
+    zframe_destroy(&type_frame);
 
     char* addr_string = zmsg_popstr(msg_resp);
     assert(addr_string);
-
     char* end;
     int addr = strtol(addr_string, &end, 10);
     assert(!*end);
-    assert(addr < UINT16_MAX);
+    assert(addr <= UINT16_MAX);
     ctx->addr = (uint16_t) addr;
+    free(addr_string);
+
+    zmsg_destroy(&msg_resp);
+
+    return OSD_OK;
+}
+
+/**
+ * Connect to the host controller
+ *
+ * @param ctx the osd_hostmod_ctx context object
+ * @return OSD_OK on success, any other value indicates an error
+ *
+ * @see osd_hostmod_disconnect()
+ */
+osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
+                               char* host_controller_address)
+{
+    int rv;
+    assert(ctx);
+    assert(ctx->is_connected == 0);
+
+    zsock_t *sock = zsock_new_dealer(host_controller_address);
+    if (!sock) {
+        err(ctx->log_ctx, "Unable to connect to %s\n", host_controller_address);
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
+    ctx->socket = sock;
+
+    obtain_diaddr(ctx);
 
     // set up thread_ctrl_receive
     rv = pthread_create(&ctx->thread_ctrl_receive, 0,
@@ -454,7 +475,7 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 
     ctx->is_connected = 1;
 
-    read_system_info_from_device(ctx);
+    //read_system_info_from_device(ctx);
 
     return OSD_OK;
 }
@@ -462,7 +483,7 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 /**
  * Is the connection to the device active?
  *
- * @param ctx the osd_com context object
+ * @param ctx the osd_hostmod context object
  * @return 1 if connected, 0 if not connected
  *
  * @see osd_hostmod_connect()
@@ -471,19 +492,23 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 API_EXPORT
 int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
 {
+    assert(ctx);
+
     return ctx->is_connected;
 }
 
 /**
  * Shut down all communication with the device
  *
- * @param ctx the osd_com context object
+ * @param ctx the osd_hostmod context object
  * @return OSD_OK on success, any other value indicates an error
  *
  * @see osd_hostmod_run()
  */
 osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
 {
+    assert(ctx);
+
     if (!ctx->is_connected) {
         return OSD_ERROR_NOT_CONNECTED;
     }
@@ -511,6 +536,7 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
 API_EXPORT
 void osd_hostmod_free(struct osd_hostmod_ctx *ctx)
 {
+    assert(ctx);
     assert(ctx->is_connected == 0);
 
     pthread_mutex_destroy(&ctx->reg_access_lock);
@@ -531,7 +557,7 @@ void osd_hostmod_free(struct osd_hostmod_ctx *ctx)
  *                     Supported values: 16, 32, 64 and 128.
  * @param[out] result the result of the register read. Preallocate a variable
  *                    large enough to hold @p reg_size_bit bits.
- * @param flags flags. Set OSD_COM_WAIT_FOREVER to block indefinetly until the
+ * @param flags flags. Set OSD_COM_WAIT_FOREVER to block indefinitely until the
  *              access succeeds.
  * @return OSD_OK on success, any other value indicates an error
  * @return OSD_ERROR_TIMEDOUT if the register read timed out (only if
@@ -539,10 +565,11 @@ void osd_hostmod_free(struct osd_hostmod_ctx *ctx)
  */
 API_EXPORT
 osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
-                                const unsigned int module_addr,
+                                const uint16_t module_addr,
                                 const uint16_t reg_addr, const int reg_size_bit,
                                 void *result, const int flags)
 {
+    assert(ctx);
     if (!ctx->is_connected) {
         return OSD_ERROR_NOT_CONNECTED;
     }
@@ -607,7 +634,7 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
     // assemble request packet
     struct osd_packet *pkg_read_req;
     rv = osd_packet_new(&pkg_read_req,
-                        osd_packet_get_size_data_from_payload(1));
+                        osd_packet_get_data_size_words_from_payload(1));
     if (OSD_FAILED(rv)) {
         ret = rv;
         goto err_free_req;
@@ -664,7 +691,7 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
         resp_type_sub_exp = RESP_READ_REG_SUCCESS_128;
         break;
     default:
-        assert(0); // API calling error
+        assert(0 && "API calling error");
     }
 
     // handle register read error
@@ -685,13 +712,13 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
     }
 
     // validate response size
-    unsigned int exp_size_data_words = 3 /* DP_HEADER_{1-3} */ +
+    unsigned int exp_data_size_words = 3 /* DP_HEADER_{1-3} */ +
             reg_size_bit / 16 /* payload */;
-    if (pkg_read_resp->size_data != exp_size_data_words) {
+    if (pkg_read_resp->data_size_words != exp_data_size_words) {
         err(ctx->log_ctx, "Expected %d 16 bit data words in register read "
             "response, got %d.\n",
-            exp_size_data_words,
-            pkg_read_resp->size_data);
+            exp_data_size_words,
+            pkg_read_resp->data_size_words);
         ret = OSD_ERROR_DEVICE_INVALID_DATA;
         goto err_free_resp;
     }

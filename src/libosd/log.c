@@ -92,6 +92,7 @@ void osd_log(struct osd_log_ctx *ctx,
  * @param ctx the logging context
  * @param log_priority filter: only log messages greater or equal the given
  *                     priority. Use on the LOG_* constants in stdlog.h
+ *                     Set to 0 to use the default logging priority.
  * @param log_fn logging callback. Set to NULL to disable logging output.
  *
  * @see osd_log_set_priority()
@@ -143,30 +144,34 @@ void osd_log_free(struct osd_log_ctx *ctx)
  * osd_log_set_caller_ctx() and retrieve it inside your @p log_fn.
  *
  * An example in C++ could look like this:
- * @code{.cpp}
- * static void MyClass::osdLogCallback(struct osd_log_ctx *gctx,
- *                                     int priority, const char *file,
- *                                     int line, const char *fn,
- *                                     const char *format, va_list args)
- * {
- *   MyClass *myclassptr = static_cast<MyClass*>(osd_get_caller_ctx(gctx));
- *   myclassptr->doLogging(format, args);
- * }
  *
- * MyClass::MyClass()
- * {
- *   // ...
- *   osd_log_set_caller_ctx(gctx, this);
- *   osd_log_set_fn(&MyClass::osdLogCallback);
- *   // ...
- * }
+ * @rst
  *
- * MyClass::doLogging(const char* format, va_list args)
- * {
- *    printf("this = %p", this);
- *    vprintf(format, args);
- * }
- * @endcode
+ * .. code-block:: c
+ *
+ *   static void MyClass::osdLogCallback(struct osd_log_ctx *gctx,
+ *                                       int priority, const char *file,
+ *                                       int line, const char *fn,
+ *                                       const char *format, va_list args)
+ *   {
+ *     MyClass *myclassptr = static_cast<MyClass*>(osd_get_caller_ctx(gctx));
+ *     myclassptr->doLogging(format, args);
+ *   }
+ *
+ *   MyClass::MyClass()
+ *   {
+ *     // ...
+ *     osd_log_set_caller_ctx(gctx, this);
+ *     osd_log_set_fn(&MyClass::osdLogCallback);
+ *     // ...
+ *   }
+ *
+ *   MyClass::doLogging(const char*   format, va_list args)
+ *   {
+ *      printf("this = %p", this);
+ *      vprintf(format, args);
+ *   }
+ * @endrst
  *
  *
  * @param ctx    the log context

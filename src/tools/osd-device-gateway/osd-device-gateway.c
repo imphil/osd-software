@@ -1,5 +1,5 @@
 /**
- * Open SoC Debug Communication Daemon
+ * Open SoC Debug Device Gateway
  */
 
 #define CLI_TOOL_PROGNAME "osd-device-gateway"
@@ -319,7 +319,7 @@ int run(void)
 
     // host -> device
     zloop_t* dev_tx_loop = zloop_new();
-    zloop_set_verbose(dev_tx_loop, 1);
+    //zloop_set_verbose(dev_tx_loop, 1);
     int rc = zloop_reader(dev_tx_loop, host_com_sock, send_to_device, NULL);
     assert(rc == 0);
     zloop_reader_set_tolerant(dev_tx_loop, host_com_sock);

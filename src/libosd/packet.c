@@ -16,7 +16,7 @@
  * Get the data size including all headers for a given payload size
  */
 API_EXPORT
-const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_payload)
+const uint16_t osd_packet_get_data_size_words_from_payload(const unsigned int size_payload)
 {
     unsigned int s = size_payload + 3 /* dest, src, flags */;
     assert(s <= UINT16_MAX);
@@ -24,23 +24,24 @@ const uint16_t osd_packet_get_size_data_from_payload(const unsigned int size_pay
 }
 
 /**
- * Allocate memory for a packet with given payload size and zero all data fields
+ * Allocate memory for a packet with given data size and zero all data fields
  *
  * The osd_packet.size field is set to the allocated size.
  *
  * @param[out] packet the packet to be allocated
- * @param[in]  size_data number of uint16_t words in the packet
+ * @param[in]  data_size_words number of uint16_t words in the packet, including the
+ *             header words.
  * @return the allocated packet, or NULL if allocation fails
  */
 API_EXPORT
-osd_result osd_packet_new(struct osd_packet **packet, size_t size_data_words)
+osd_result osd_packet_new(struct osd_packet **packet, size_t data_size_words)
 {
-    ssize_t size = sizeof(uint16_t) * 1            // osd_packet.size_data
-                   + sizeof(uint16_t) * size_data_words; // osd_packet.data
+    ssize_t size = sizeof(uint16_t) * 1            // osd_packet.data_size_words
+                   + sizeof(uint16_t) * data_size_words; // osd_packet.data
     struct osd_packet *pkg = calloc(1, size);
     assert(pkg);
 
-    pkg->size_data = size_data_words;
+    pkg->data_size_words = data_size_words;
 
     *packet = pkg;
 
@@ -62,6 +63,9 @@ void osd_packet_free(struct osd_packet *packet)
 API_EXPORT
 unsigned int osd_packet_get_dest(const struct osd_packet *packet)
 {
+    assert((packet->data_size_words >= 3) &&
+           "The packet must be large enough for 3 header words.");
+
     return (packet->data.dest >> DP_HEADER_DEST_SHIFT)
            & DP_HEADER_DEST_MASK;
 }
@@ -72,6 +76,9 @@ unsigned int osd_packet_get_dest(const struct osd_packet *packet)
 API_EXPORT
 unsigned int osd_packet_get_src(const struct osd_packet *packet)
 {
+    assert((packet->data_size_words >= 3) &&
+           "The packet must be large enough for 3 header words.");
+
     return (packet->data.src >> DP_HEADER_SRC_SHIFT)
            & DP_HEADER_SRC_MASK;
 }
@@ -82,6 +89,9 @@ unsigned int osd_packet_get_src(const struct osd_packet *packet)
 API_EXPORT
 unsigned int osd_packet_get_type(const struct osd_packet *packet)
 {
+    assert((packet->data_size_words >= 3) &&
+           "The packet must be large enough for 3 header words.");
+
     return (packet->data.flags >> DP_HEADER_TYPE_SHIFT)
            & DP_HEADER_TYPE_MASK;
 }
@@ -92,6 +102,9 @@ unsigned int osd_packet_get_type(const struct osd_packet *packet)
 API_EXPORT
 unsigned int osd_packet_get_type_sub(const struct osd_packet *packet)
 {
+    assert((packet->data_size_words >= 3) &&
+           "The packet must be large enough for 3 header words.");
+
     return (packet->data.flags >> DP_HEADER_TYPE_SUB_SHIFT)
            & DP_HEADER_TYPE_SUB_MASK;
 }
@@ -114,6 +127,9 @@ osd_result osd_packet_set_header(struct osd_packet* packet,
                                  const enum osd_packet_type type,
                                  const unsigned int type_sub)
 {
+    assert((packet->data_size_words >= 3) &&
+           "The packet must be large enough for 3 header words.");
+
     packet->data.dest = 0x0000;
     packet->data.src = 0x0000;
     packet->data.flags = 0x0000;
@@ -147,7 +163,7 @@ osd_result osd_packet_set_header(struct osd_packet* packet,
 API_EXPORT
 size_t osd_packet_sizeof(struct osd_packet *packet)
 {
-    return packet->size_data * sizeof(uint16_t);
+    return packet->data_size_words * sizeof(uint16_t);
 }
 
 /**
@@ -164,15 +180,17 @@ void osd_packet_log(const struct osd_packet *packet,
         MACROSTR(OSD_PACKET_TYPE_RES),
     };
 
-    dbg(log_ctx, "Packet of %u data words:\n", packet->size_data);
-    dbg(log_ctx, "DEST = %u, SRC = %u, TYPE = %u (%s), TYPE_SUB = %u\n",
-        osd_packet_get_dest(packet),
-        osd_packet_get_src(packet),
-        osd_packet_get_type(packet),
-        osd_packet_type_name[osd_packet_get_type(packet)],
-        osd_packet_get_type_sub(packet));
+    dbg(log_ctx, "Packet of %u data words:\n", packet->data_size_words);
+    if (packet->data_size_words >= 3) {
+        dbg(log_ctx, "DEST = %u, SRC = %u, TYPE = %u (%s), TYPE_SUB = %u\n",
+            osd_packet_get_dest(packet),
+            osd_packet_get_src(packet),
+            osd_packet_get_type(packet),
+            osd_packet_type_name[osd_packet_get_type(packet)],
+            osd_packet_get_type_sub(packet));
+    }
     dbg(log_ctx, "Packet data (including header):\n");
-    for (uint16_t i = 0; i < packet->size_data; i++) {
+    for (uint16_t i = 0; i < packet->data_size_words; i++) {
         dbg(log_ctx, "  0x%04x\n", packet->data_raw[i]);
     }
 }

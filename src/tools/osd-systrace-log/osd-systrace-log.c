@@ -76,8 +76,6 @@ int run(void)
         fatal("Unable to connect to host controller (rv=%d).\n", osd_rv);
     }
 
-    sleep(2);
-
     uint16_t address = osd_hostmod_get_addr(hostmod_ctx);
     info("Our address in the debug network is %u\n", address);
 
