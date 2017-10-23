@@ -23,12 +23,12 @@ To get pass/fail remarks per test function set the ``CK_VERBOSITY`` environment 
    less tests/unit/check_hostmod.log
 
 Sometimes it's helpful to debug the tests themselves using gdb.
-The following command line runs a compiled test under gdb (replace ``check_com`` with your test):
+The following command line runs a compiled test under gdb (replace ``check_hostmod`` with your test):
 
 .. code-block:: sh
 
    make check # build the tests (if not already done)
-   CK_FORK=no libtool --mode=execute gdb tests/unit/check_com
+   CK_FORK=no libtool --mode=execute gdb tests/unit/check_hostmod
 
 
 To gain insight into which parts of the software are tested you can generate a coverage report.

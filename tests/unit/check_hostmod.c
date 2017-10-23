@@ -10,6 +10,7 @@ struct osd_hostmod_ctx *hostmod_ctx;
 struct osd_log_ctx* log_ctx;
 
 pthread_t mock_host_controller_thread;
+volatile int mock_host_controller_ready;
 volatile int mock_host_controller_thread_cancel;
 
 zlist_t *mock_exp_req_list;
@@ -18,9 +19,20 @@ zlist_t *mock_exp_resp_list;
 // DI address assigned to the host module tested here
 const unsigned int mock_hostmod_diaddr = 7;
 
+
+/**
+ * Log handler for OSD
+ */
+static void osd_log_handler(struct osd_log_ctx *ctx, int priority,
+                            const char *file, int line, const char *fn,
+                            const char *format, va_list args)
+{
+    vfprintf(stderr, format, args);
+}
+
+
 static int mock_host_controller_shutdown_reactor(zloop_t *loop, int timer_id, void *arg)
 {
-    printf("got shutdown reactor\n");
     if (mock_host_controller_thread_cancel) {
         // Returning -1 ends zloop
         return -1;
@@ -89,19 +101,20 @@ static void* mock_host_controller(void* arg)
     rv = zloop_reader(mock_host_controller_loop, server_socket,
                       mock_host_controller_msg_reactor, NULL);
     ck_assert_int_eq(rv, 0);
+    zloop_reader_set_tolerant(mock_host_controller_loop, server_socket);
 
     zloop_timer(mock_host_controller_loop, 200, 0,
                 mock_host_controller_shutdown_reactor, NULL);
     ck_assert_int_eq(rv, 0);
 
     // start processing
+    mock_host_controller_ready = 1;
     zloop_start(mock_host_controller_loop);
 
     // cleanup
+    mock_host_controller_ready = 0;
     zloop_destroy(&mock_host_controller_loop);
     zsock_destroy(&server_socket);
-
-    printf("returning from thread\n");
 
     return 0;
 }
@@ -198,12 +211,18 @@ void setup_zeromq(void)
     int rv;
 
     mock_host_controller_thread_cancel = 0;
+    mock_host_controller_ready = 0;
     rv = pthread_create(&mock_host_controller_thread, 0, mock_host_controller,
                         NULL);
     ck_assert_int_eq(rv, 0);
 
     mock_exp_req_list = zlist_new();
     mock_exp_resp_list = zlist_new();
+
+    // it takes a bit for the ZeroMQ socket to be ready
+    while (!mock_host_controller_ready) {
+        usleep(10);
+    }
 }
 
 /**
@@ -214,7 +233,7 @@ void setup_hostmod(void)
     osd_result rv;
 
     // log context
-    rv = osd_log_new(&log_ctx, 0, NULL);
+    rv = osd_log_new(&log_ctx, LOG_DEBUG, osd_log_handler);
     ck_assert_int_eq(rv, OSD_OK);
 
     // initialize hostmod context
@@ -253,7 +272,6 @@ void teardown_hostmod(void)
 
 void teardown_zeromq(void)
 {
-    printf("setting cancel to 1\n");
     mock_host_controller_thread_cancel = 1;
 
     pthread_join(mock_host_controller_thread, NULL);

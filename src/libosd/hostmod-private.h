@@ -14,7 +14,7 @@ struct osd_system_info {
 };
 
 /**
- * Communication context
+ * Host module context
  */
 struct osd_hostmod_ctx {
     /** Is the library connected to a device? */
@@ -23,16 +23,14 @@ struct osd_hostmod_ctx {
     /** Logging context */
     struct osd_log_ctx *log_ctx;
 
+    /** Address assigned to this module in the debug interconnect */
     uint16_t addr;
 
     /** communication socket to the host controller */
-    zsock_t *socket;
-
-    /** receive zloop */
-    zloop_t *rx_zloop;
+    zsock_t *inproc_ctrl_io_socket;
 
     /** Control data receive thread */
-    pthread_t thread_ctrl_receive;
+    pthread_t thread_ctrl_io;
     /** Lock protecting all register accesses */
     pthread_mutex_t reg_access_lock;
     /** Register access response has been received */
@@ -47,6 +45,22 @@ struct osd_hostmod_ctx {
     struct osd_module_desc *modules;
     /** number of elements in modules */
     size_t modules_len;
+};
+
+/**
+ * Private context for the ctrl_io thread
+ */
+struct osd_hostmod_ctrl_io_ctx {
+    /** ZeroMQ address/URL of the host controller */
+    char* host_controller_address;
+
+    /** Logging context */
+    struct osd_log_ctx *log_ctx;
+
+    /** Control communication socket with the host controller */
+    zsock_t *ctrl_socket;
+    /** Inprocess communication with the main thread */
+    zsock_t *inproc_ctrl_io_socket;
 };
 
 

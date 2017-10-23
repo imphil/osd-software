@@ -22,7 +22,6 @@
  *
  * Author(s):
  *   Philipp Wagner <philipp.wagner@tum.de>
- *   Stefan Wallentowitz <stefan@wallentowitz.de>
  */
 
 
@@ -38,6 +37,9 @@
 
 /** Timeout when accessing debug registers (in ns) */
 #define REG_ACCESS_TIMEOUT_NS (1*1000*1000*1000) // 1 s
+
+/** Receive timeout when talking to the host controller over ZeroMQ */
+#define ZMQ_RCV_TIMEOUT (1*1000) // 1 s
 
 /** Debugging aid: log all sent and received packets */
 #define LOG_TRANSMITTED_PACKETS 1
@@ -170,50 +172,6 @@ static osd_result enumerate_debug_modules(struct osd_hostmod_ctx *ctx)
 
 #if 0
 /**
- * Get the size of the Debug Transport Datagram in words
- */
-size_t osd_dtd_get_size_words(osd_dtd dtd)
-{
-    if (!dtd) {
-        return 0;
-    }
-
-    /*
-     * The first word in the DTD always contains the size. We then need to add
-     * the word containing the size itself.
-     */
-    return dtd[0] + 1;
-}
-
-/**
- * Get the Debug Transport Datagram representation of a packet
- *
- * Note that the ownership of the data in @p dtd remains with the packet, do
- * not free @p dtd.
- *
- * @param[in] packet packet to get the DTD from
- * @param[out] dtd   DTD representation of the packet
- * @return OSD_OK on success, any other value indicates an error
- */
-osd_result osd_packet_get_dtd(struct osd_packet *packet, osd_dtd *dtd)
-{
-    *dtd = &packet->data_size_words;
-    return OSD_OK;
-}
-
-/**
- * Make a packet out of a Debug Transport Datagram
- *
- * The ownership of the @p dtd is transferred to the packet, @p dtd may not be
- * used or freed anymore after calling this function.
- */
-osd_result osd_dtd_to_packet(osd_dtd dtd, struct osd_packet** packet)
-{
-    *packet = (struct osd_packet*)dtd;
-    return OSD_OK;
-}
-
-/**
  * Send out a packet to the device
  *
  * The packet is encoded as Debug Transport Datagram (DTD), as specified in the
@@ -287,10 +245,51 @@ static void handle_incoming_di_packet(struct osd_hostmod_ctx *ctx,
     }
 }
 
-static int rcv_msg(zloop_t *loop, zsock_t *reader, void *ctx_void)
+/**
+ * Process messages from the main thread to the ctrl_io thread
+ *
+ * @return 0 if the message was processed, -1 if @p loop should be terminated
+ */
+static int ctrl_io_inproc_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
+{
+    struct osd_hostmod_ctrl_io_ctx* ctx = (struct osd_hostmod_ctrl_io_ctx*)ctx_void;
+    int retval;
+    int rv;
+
+    zmsg_t *msg = zmsg_recv(reader);
+    if (!msg) {
+        return -1; // process was interrupted, terminate zloop
+    }
+    char *action = zmsg_popstr(msg);
+
+    if (!strcmp(action, "DISCONNECT")) {
+        // End ctrl_io thread by returning -1, which will terminate zloop
+        retval = -1;
+        goto free_return;
+
+    } else if (!strcmp(action, "FWD")) {
+        // Forward a message to the host controller
+        rv = zmsg_send(&msg, ctx->ctrl_socket);
+        assert(rv == 0);
+
+    } else {
+        assert(0 && "Unknown threadcom message received.");
+    }
+
+    retval = 0;
+free_return:
+    zmsg_destroy(&msg);
+    free(action);
+    return retval;
+}
+
+/**
+ * Process incoming messages from the host controller
+ */
+static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
 {
     osd_result rv;
-    struct osd_hostmod_ctx* ctx = (struct osd_hostmod_ctx*)ctx_void;
+    struct osd_hostmod_ctrl_io_ctx* ctx = (struct osd_hostmod_ctrl_io_ctx*)ctx_void;
 
     zmsg_t *msg = zmsg_recv(reader);
     if (!msg) {
@@ -330,26 +329,176 @@ ret:
     zmsg_destroy(&msg);
     return 0;
 }
-/**
- * Read data from the device encoded as Debug Transport Datagrams (DTDs)
- */
-static void* thread_ctrl_receive(void *ctx_void)
-{
-    struct osd_hostmod_ctx *ctx = (struct osd_hostmod_ctx*) ctx_void;
-    ssize_t rv;
 
-    // ingress data path
-    zloop_t* rx_zloop = zloop_new();
-    zloop_set_verbose(rx_zloop, 1);
-    rv = zloop_reader(rx_zloop, ctx->socket, rcv_msg, ctx);
+/**
+ * Send a data message to another thread over a ZeroMQ socket
+ *
+ * @see threadcom_send_status()
+ */
+static void threadcom_send_data(zsock_t *socket, const char* status,
+                                const void* data, size_t size)
+{
+    int zmq_rv;
+
+    zmsg_t *msg = zmsg_new();
+    assert(msg);
+    zmq_rv = zmsg_addstr(msg, status);
+    assert(zmq_rv == 0);
+    if (data != NULL && size > 0) {
+        zmq_rv = zmsg_addmem(msg, data, size);
+        assert(zmq_rv == 0);
+    }
+    zmq_rv = zmsg_send(&msg, socket);
+    assert(zmq_rv == 0);
+}
+
+/**
+ * Send a status message to another thread over a ZeroMQ socket
+ *
+ * @see threadcom_send_data()
+ */
+static void threadcom_send_status(zsock_t *socket, const char* status)
+{
+    threadcom_send_data(socket, status, NULL, 0);
+}
+
+/**
+ * Obtain a DI address for this host debug module from the host controller
+ */
+static osd_result obtain_diaddr(struct osd_hostmod_ctrl_io_ctx *ctx, uint16_t *di_addr)
+{
+    int rv;
+
+    zsock_t *sock = ctx->ctrl_socket;
+
+    // request
+    zmsg_t *msg_req = zmsg_new();
+    assert(msg_req);
+
+    rv = zmsg_addstr(msg_req, "M");
     assert(rv == 0);
-    zloop_reader_set_tolerant(rx_zloop, ctx->socket);
-    ctx->rx_zloop = rx_zloop;
+    rv = zmsg_addstr(msg_req, "DIADDR_REQUEST");
+    assert(rv == 0);
+    rv = zmsg_send(&msg_req, sock);
+    if (rv != 0) {
+        err(ctx->log_ctx, "Unable to send DIADDR_REQUEST request to host controller\n");
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
+
+    // response
+    errno = 0;
+    zmsg_t *msg_resp = zmsg_recv(sock);
+    if (!msg_resp) {
+        err(ctx->log_ctx, "No response received from host controller: %s (%d)\n",
+            strerror(errno), errno);
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
+
+    zframe_t *type_frame = zmsg_pop(msg_resp);
+    assert(zframe_streq(type_frame, "M"));
+    zframe_destroy(&type_frame);
+
+    char* addr_string = zmsg_popstr(msg_resp);
+    assert(addr_string);
+    char* end;
+    long int addr = strtol(addr_string, &end, 10);
+    assert(!*end);
+    assert(addr <= UINT16_MAX);
+    *di_addr = (uint16_t) addr;
+    free(addr_string);
+
+    zmsg_destroy(&msg_resp);
+
+    dbg(ctx->log_ctx, "Obtained DI address %u from host controller.\n",
+        *di_addr);
+
+    return OSD_OK;
+}
+
+/**
+ * I/O Thread for all control traffic
+ *
+ * This thread handles all control communication with the host controller.
+ * Inside the host module communicate with this thread using threadcom_*
+ * functions, which make use of a inproc PAIR ZeroMQ socket.
+ *
+ * @param ctrl_io_ctx_void the thread context object. The thread takes over
+ *                         ownership of this object and frees it when its done.
+ */
+static void* thread_ctrl_io_main(void *ctrl_io_ctx_void)
+{
+    struct osd_hostmod_ctrl_io_ctx *ctrl_io_ctx = (struct osd_hostmod_ctrl_io_ctx*) ctrl_io_ctx_void;
+
+    int zmq_rv;
+    osd_result osd_rv;
+    zloop_t* ctrl_zloop = NULL;
+
+    // create new PAIR socket for the communication of the main thread in this
+    // host module with this I/O thread
+    ctrl_io_ctx->inproc_ctrl_io_socket = zsock_new_pair(">inproc://ctrl_io");
+    assert(ctrl_io_ctx->inproc_ctrl_io_socket);
+
+    // create new DIALER socket for the control connection of this module
+    ctrl_io_ctx->ctrl_socket = zsock_new_dealer(ctrl_io_ctx->host_controller_address);
+    if (!ctrl_io_ctx->ctrl_socket) {
+        err(ctrl_io_ctx->log_ctx, "Unable to connect to %s\n",
+            ctrl_io_ctx->host_controller_address);
+        threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "CONNECT_FAIL");
+        goto free_return;
+    }
+
+    zsock_set_rcvtimeo(ctrl_io_ctx->ctrl_socket, ZMQ_RCV_TIMEOUT);
+
+    // Get our DI address
+    uint16_t di_addr;
+    osd_rv = obtain_diaddr(ctrl_io_ctx, ctrl_io_ctx->ctrl_socket, &di_addr);
+    if (OSD_FAILED(osd_rv)) {
+        threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "CONNECT_FAIL");
+        goto free_return;
+    }
+
+    // prepare processing loop
+    ctrl_zloop = zloop_new();
+    assert(ctrl_zloop);
+
+#ifdef DEBUG
+    zloop_set_verbose(ctrl_zloop, 1);
+#endif
+
+    zmq_rv = zloop_reader(ctrl_zloop, ctrl_io_ctx->ctrl_socket, ctrl_io_ext_rcv,
+                          ctrl_io_ctx);
+    assert(zmq_rv == 0);
+    zloop_reader_set_tolerant(ctrl_zloop, ctrl_io_ctx->ctrl_socket);
+
+    zmq_rv = zloop_reader(ctrl_zloop, ctrl_io_ctx->inproc_ctrl_io_socket,
+                          ctrl_io_inproc_rcv, ctrl_io_ctx);
+    zloop_reader_set_tolerant(ctrl_zloop, ctrl_io_ctx->inproc_ctrl_io_socket);
+    assert(zmq_rv == 0);
+
+    // connection successful: inform main thread
+    threadcom_send_data(ctrl_io_ctx->inproc_ctrl_io_socket, "CONNECT_OK",
+                        &di_addr, sizeof(uint16_t));
 
     // start event loop -- takes over thread
-    zloop_start(ctx->rx_zloop);
+    zloop_start(ctrl_zloop);
 
-    return NULL;
+    // when we reach this point the loop has been terminated either through a
+    // signal or a control message
+    threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "DISCONNECT_OK");
+
+free_return:
+    zloop_destroy(&ctrl_zloop);
+
+    zsock_destroy(&ctrl_io_ctx->ctrl_socket);
+    zsock_destroy(&ctrl_io_ctx->inproc_ctrl_io_socket);
+
+    free(ctrl_io_ctx->host_controller_address);
+    ctrl_io_ctx->host_controller_address = NULL;
+
+    free(ctrl_io_ctx);
+    ctrl_io_ctx = NULL;
+
+    return 0;
 }
 
 /**
@@ -396,52 +545,6 @@ uint16_t osd_hostmod_get_addr(struct osd_hostmod_ctx *ctx)
 }
 
 /**
- * Obtain a DI address for this host debug module from the host controller
- */
-static osd_result obtain_diaddr(struct osd_hostmod_ctx *ctx)
-{
-    int rv;
-
-    // request
-    zmsg_t *msg_req = zmsg_new();
-    assert(msg_req);
-
-    rv = zmsg_addstr(msg_req, "M");
-    assert(rv == 0);
-    rv = zmsg_addstr(msg_req, "DIADDR_REQUEST");
-    assert(rv == 0);
-    rv = zmsg_send(&msg_req, ctx->socket);
-    if (rv != 0) {
-        err(ctx->log_ctx, "Unable to send DIADDR_REQUEST request to host controller\n");
-        return OSD_ERROR_CONNECTION_FAILED;
-    }
-
-    // response
-    zmsg_t *msg_resp = zmsg_recv(ctx->socket);
-    if (!msg_resp) {
-        err(ctx->log_ctx, "No response received from host controller\n");
-        return OSD_ERROR_CONNECTION_FAILED;
-    }
-
-    zframe_t *type_frame = zmsg_pop(msg_resp);
-    assert(zframe_streq(type_frame, "M"));
-    zframe_destroy(&type_frame);
-
-    char* addr_string = zmsg_popstr(msg_resp);
-    assert(addr_string);
-    char* end;
-    int addr = strtol(addr_string, &end, 10);
-    assert(!*end);
-    assert(addr <= UINT16_MAX);
-    ctx->addr = (uint16_t) addr;
-    free(addr_string);
-
-    zmsg_destroy(&msg_resp);
-
-    return OSD_OK;
-}
-
-/**
  * Connect to the host controller
  *
  * @param ctx the osd_hostmod_ctx context object
@@ -450,32 +553,51 @@ static osd_result obtain_diaddr(struct osd_hostmod_ctx *ctx)
  * @see osd_hostmod_disconnect()
  */
 osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
-                               char* host_controller_address)
+                               const char* host_controller_address)
 {
     int rv;
+    osd_result osd_rv;
     assert(ctx);
     assert(ctx->is_connected == 0);
 
-    zsock_t *sock = zsock_new_dealer(host_controller_address);
-    if (!sock) {
-        err(ctx->log_ctx, "Unable to connect to %s\n", host_controller_address);
+    // Establish connection with control I/O thread
+    zsock_t *inproc_ctrl_io_socket = zsock_new_pair("@inproc://ctrl_io");
+    assert(inproc_ctrl_io_socket);
+    ctx->inproc_ctrl_io_socket = inproc_ctrl_io_socket;
+
+    // prepare I/O thread context (will be handed over to the thread)
+    struct osd_hostmod_ctrl_io_ctx* ctrl_io_ctx = calloc(1, sizeof(struct osd_hostmod_ctrl_io_ctx));
+    ctrl_io_ctx->host_controller_address = strdup(host_controller_address);
+    assert(ctrl_io_ctx->host_controller_address);
+    ctrl_io_ctx->log_ctx = ctx->log_ctx;
+
+    // set up control I/O thread
+    rv = pthread_create(&ctx->thread_ctrl_io, 0,
+                        thread_ctrl_io_main, (void*)ctrl_io_ctx);
+    assert(rv == 0);
+
+    // wait for connection to be established
+    zmsg_t *msg = zmsg_recv(ctx->inproc_ctrl_io_socket);
+    if (!msg) {
         return OSD_ERROR_CONNECTION_FAILED;
     }
-    ctx->socket = sock;
+    zframe_t *status_frame = zmsg_pop(ctx->inproc_ctrl_io_socket);
+    if (zframe_streq(status_frame, "CONNECT_OK")) {
+        zframe_t *di_addr_frame = zmsg_pop(ctx->inproc_ctrl_io_socket);
+        uint16_t *di_addr = zframe_data(di_addr_frame);
+        ctx->addr = *di_addr;
+        zframe_destroy(&di_addr_frame);
 
-    obtain_diaddr(ctx);
-
-    // set up thread_ctrl_receive
-    rv = pthread_create(&ctx->thread_ctrl_receive, 0,
-                        thread_ctrl_receive, (void*)ctx);
-    if (rv) {
-        err(ctx->log_ctx, "Unable to create thread_ctrl_receive: %d\n", rv);
-        return OSD_ERROR_FAILURE;
+        ctx->is_connected = 1;
+    } else if (zframe_streq(status_frame, "CONNECT_FAIL")) {
+        ctx->is_connected = 1;
     }
+    zframe_destroy(&status_frame);
+    zmsg_destroy(&msg);
 
-    ctx->is_connected = 1;
-
-    //read_system_info_from_device(ctx);
+    if (!ctx->is_connected) {
+        return OSD_ERROR_CONNECTION_FAILED;
+    }
 
     return OSD_OK;
 }
@@ -513,15 +635,27 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
         return OSD_ERROR_NOT_CONNECTED;
     }
 
+    // signal control I/O thread to shut down
+    threadcom_send_status(ctx->inproc_ctrl_io_socket, "DISCONNECT");
+
+    // wait for disconnect to happen
+    zmsg_t *msg = zmsg_recv(ctx->inproc_ctrl_io_socket);
+    if (!msg) {
+        return OSD_ERROR_FAILURE;
+    }
+    zframe_t *status_frame = zmsg_pop(ctx->inproc_ctrl_io_socket);
+    if (!zframe_streq(status_frame, "DISCONNECT_OK")) {
+        zframe_destroy(&status_frame);
+        zmsg_destroy(&msg);
+        return OSD_ERROR_FAILURE;
+    }
+    zframe_destroy(&status_frame);
+    zmsg_destroy(&msg);
+
     ctx->is_connected = 0;
 
-    zloop_destroy(&ctx->rx_zloop);
-
-    void *status;
-    pthread_cancel(ctx->thread_ctrl_receive);
-    pthread_join(ctx->thread_ctrl_receive, &status);
-
-    zsock_destroy(&ctx->socket);
+    // wait until control I/O thread has finished its cleanup
+    pthread_join(ctx->thread_ctrl_io, NULL);
 
     return OSD_OK;
 }

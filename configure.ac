@@ -80,7 +80,6 @@ AX_VALGRIND_CHECK
 AX_CODE_COVERAGE
 
 # ZeroMQ and high-level C wrapper (CZMQ)
-# use the libzmq3-dev and libczmq3-dev packages in Debian/Ubuntu
 PKG_CHECK_MODULES([libzmq], [libzmq >= 4.1])
 PKG_CHECK_MODULES([libczmq], [libczmq >= 3.0])
 
