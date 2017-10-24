@@ -62,7 +62,7 @@ osd_result osd_hostmod_get_modules(struct osd_hostmod_ctx *ctx,
                                size_t *modules_len);
 
 osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
-                               char* host_controller_address);
+                               const char* host_controller_address);
 osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx);
 int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx);
 
