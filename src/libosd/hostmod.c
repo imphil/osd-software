@@ -267,8 +267,19 @@ static int ctrl_io_inproc_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
         retval = -1;
         goto free_return;
 
-    } else if (!strcmp(action, "FWD")) {
-        // Forward a message to the host controller
+    } else if (!strcmp(action, "SEND_DI_PKG")) {
+        // Forward a osd_packet in the second frame to the host controller as
+        // data message
+        zframe_t *di_pkg_frame = zmsg_pop(msg);
+        assert(di_pkg_frame);
+
+        zmsg_t *data_msg = zmsg_new();
+        assert(data_msg);
+        rv = zmsg_addstr(data_msg, "D");
+        assert(rv == 0);
+        rv = zmsg_append(data_msg, di_pkg_frame);
+        assert(rv == 0);
+
         rv = zmsg_send(&msg, ctx->ctrl_socket);
         assert(rv == 0);
 
