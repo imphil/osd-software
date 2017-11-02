@@ -35,14 +35,11 @@
 #include <string.h>
 #include "hostmod-private.h"
 
-/** Timeout when accessing debug registers (in ns) */
-#define REG_ACCESS_TIMEOUT_NS (1*1000*1000*1000) // 1 s
-
-/** Receive timeout when talking to the host controller over ZeroMQ */
+/**
+ * Timeout (in ms) when receiving data from a ZeroMQ socket. This can be either
+ * data from the host controller, or data from the I/O thread.
+ */
 #define ZMQ_RCV_TIMEOUT (1*1000) // 1 s
-
-/** Debugging aid: log all sent and received packets */
-#define LOG_TRANSMITTED_PACKETS 1
 
 /**
  * Send a DI Packet
@@ -54,7 +51,7 @@ static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
     zmsg_t *msg = zmsg_new();
     assert(msg);
 
-    rv = zmsg_addstr(msg, "DI_PKG");
+    rv = zmsg_addstr(msg, "D");
     assert(rv == 0);
     dbg(ctx->log_ctx, "size: %d\n", packet->data_size_words);
     rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
@@ -69,21 +66,30 @@ static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
 }
 
 /**
- * Receive a DI Packet
+ * Receive a DI Packet (on the main thread)
+ *
+ * @return OSD_OK if the operation was successful,
+ *         OSD_ERROR_TIMEDOUT if the operation timed out.
+ *         Any other value indicates an error
  */
 static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
                                              struct osd_packet **packet)
 {
     osd_result osd_rv;
 
+    errno = 0;
     zmsg_t* msg = zmsg_recv(ctx->inproc_ctrl_io_socket);
+    if (!msg && errno == EAGAIN) {
+        return OSD_ERROR_TIMEDOUT;
+    }
+    assert(msg);
 
     // ensure that the message we got from the I/O thread is packet data
-    // XXX: possibly extend to hand off non DI_PKG messages to their appropriate
+    // XXX: possibly extend to hand off non-packet messages to their appropriate
     // handler
     zframe_t *type_frame = zmsg_pop(msg);
     assert(type_frame);
-    assert(zframe_streq(type_frame, "DI_PKG"));
+    assert(zframe_streq(type_frame, "D"));
     zframe_destroy(&type_frame);
 
     // get osd_packet from frame data
@@ -212,82 +218,6 @@ static osd_result enumerate_debug_modules(struct osd_hostmod_ctx *ctx)
     return ret;
 }
 
-
-#if 0
-/**
- * Send out a packet to the device
- *
- * The packet is encoded as Debug Transport Datagram (DTD), as specified in the
- * HIM specification.
- *
- * @param ctx communication library context
- * @param packet debug packet to be transmitted
- * @return OSD_OK if sending was successful, any other value indicates an error
- */
-static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
-                                      struct osd_packet *packet)
-{
-    assert(ctx->device_ctrl_if->write);
-
-#if LOG_TRANSMITTED_PACKETS
-    dbg(ctx->log_ctx, "Sending packet to device\n");
-    osd_packet_log(packet, ctx->log_ctx);
-#endif
-
-    osd_result rv;
-    ssize_t size_written;
-    osd_dtd dtd;
-
-    rv = osd_packet_get_dtd(packet, &dtd);
-    assert(OSD_SUCCEEDED(rv));
-
-    size_written = ctx->device_ctrl_if->write(dtd, osd_dtd_get_size_words(dtd),
-                                              0);
-    if (size_written < 0) {
-        err(ctx->log_ctx, "Unable to write data to device. Return code: %zu\n",
-            size_written);
-    }
-    if ((size_t)size_written != osd_dtd_get_size_words(dtd)) {
-        err(ctx->log_ctx,
-            "Tried to write %zu words to device, wrote %zu bytes.\n",
-            osd_dtd_get_size_words(dtd), size_written);
-        return OSD_ERROR_COM;
-    }
-
-    return OSD_OK;
-}
-#endif
-
-static void handle_incoming_di_packet(struct osd_hostmod_ctx *ctx,
-                                      struct osd_packet* packet)
-{
-#if LOG_TRANSMITTED_PACKETS
-    dbg(ctx->log_ctx, "Received new packet\n");
-    osd_packet_log(packet, ctx->log_ctx);
-#endif
-
-    switch (osd_packet_get_type(packet)) {
-    case OSD_PACKET_TYPE_REG:
-        pthread_mutex_lock(&ctx->reg_access_lock);
-        // the previous control request must be handled by now
-        assert(ctx->rcv_ctrl_packet == NULL);
-        ctx->rcv_ctrl_packet = packet;
-        pthread_cond_signal(&ctx->reg_access_complete);
-        pthread_mutex_unlock(&ctx->reg_access_lock);
-        break;
-    case OSD_PACKET_TYPE_EVENT:
-        // XXX: forward to appropriate handler
-        break;
-    case OSD_PACKET_TYPE_PLAIN:
-        // PLAIN packets should only be sent out, not received (as of now)
-    case OSD_PACKET_TYPE_RES:
-        // must be ignored by spec
-    default:
-        // Should never be reached.
-        assert(0);
-    }
-}
-
 /**
  * Process messages from the main thread to the ctrl_io thread
  *
@@ -303,44 +233,35 @@ static int ctrl_io_inproc_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
     if (!msg) {
         return -1; // process was interrupted, terminate zloop
     }
-    char *action = zmsg_popstr(msg);
 
-    if (!strcmp(action, "DISCONNECT")) {
+    zframe_t *type_frame = zmsg_first(msg);
+    assert(type_frame);
+
+    if (zframe_streq(type_frame, "I-DISCONNECT")) {
         // End ctrl_io thread by returning -1, which will terminate zloop
         retval = -1;
         goto free_return;
 
-    } else if (!strcmp(action, "DI_PKG")) {
-        printf("got DI_PKG to forward to other socket\n");
-        // Forward a osd_packet in the second frame to the host controller as
-        // data message
-        zframe_t *di_pkg_frame = zmsg_pop(msg);
-        assert(di_pkg_frame);
-
-        zmsg_t *data_msg = zmsg_new();
-        assert(data_msg);
-        rv = zmsg_addstr(data_msg, "D");
+    } else if (zframe_streq(type_frame, "D")) {
+        // Forward data packet to the host controller
+        rv = zmsg_send(&msg, ctx->ctrl_socket);
         assert(rv == 0);
-        rv = zmsg_append(data_msg, &di_pkg_frame);
-        assert(rv == 0);
-
-        rv = zmsg_send(&data_msg, ctx->ctrl_socket);
-        assert(rv == 0);
-        printf("sent out di packet to control socket\n");
+        retval = 0;
 
     } else {
-        assert(0 && "Unknown threadcom message received.");
+        assert(0 && "Unknown message received from main thread.");
     }
 
     retval = 0;
 free_return:
     zmsg_destroy(&msg);
-    free(action);
     return retval;
 }
 
 /**
  * Process incoming messages from the host controller
+ *
+ * @return 0 if the message was processed, -1 if @p loop should be terminated
  */
 static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
 {
@@ -352,32 +273,20 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
         return -1; // process was interrupted, terminate zloop
     }
 
-    zframe_t *type_frame = zmsg_pop(msg);
+    zframe_t *type_frame = zmsg_first(msg);
     assert(type_frame);
     if (zframe_streq(type_frame, "D")) {
         // forward data messages to the main thread
-        zframe_t *di_pkg_frame = zmsg_pop(msg);
-        assert(di_pkg_frame);
-
-        zmsg_t *data_msg = zmsg_new();
-        assert(data_msg);
-        rv = zmsg_addstr(data_msg, "DI_PKG");
+        rv = zmsg_send(&msg, ctx->inproc_ctrl_io_socket);
         assert(rv == 0);
-        rv = zmsg_append(data_msg, &di_pkg_frame);
-        assert(rv == 0);
-
-        zmsg_send(&data_msg, ctx->inproc_ctrl_io_socket);
 
     } else if (zframe_streq(type_frame, "M")) {
-        // TODO: handle incoming management messages
-        err(ctx->log_ctx, "XXX: management messages are not yet handled by this client.\n");
+        assert(0 && "TODO: Handle incoming management messages.");
 
     } else {
         assert(0 && "Message of unknown type received.");
     }
 
-    zframe_destroy(&type_frame);
-    zmsg_destroy(&msg);
 
     return 0;
 }
@@ -495,7 +404,7 @@ static void* thread_ctrl_io_main(void *ctrl_io_ctx_void)
     if (!ctrl_io_ctx->ctrl_socket) {
         err(ctrl_io_ctx->log_ctx, "Unable to connect to %s\n",
             ctrl_io_ctx->host_controller_address);
-        threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "CONNECT_FAIL");
+        threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "I-CONNECT-FAIL");
         goto free_return;
     }
 
@@ -505,7 +414,7 @@ static void* thread_ctrl_io_main(void *ctrl_io_ctx_void)
     uint16_t di_addr;
     osd_rv = obtain_diaddr(ctrl_io_ctx, &di_addr);
     if (OSD_FAILED(osd_rv)) {
-        threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "CONNECT_FAIL");
+        threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "I-CONNECT-FAIL");
         goto free_return;
     }
 
@@ -528,7 +437,7 @@ static void* thread_ctrl_io_main(void *ctrl_io_ctx_void)
     assert(zmq_rv == 0);
 
     // connection successful: inform main thread
-    threadcom_send_data(ctrl_io_ctx->inproc_ctrl_io_socket, "CONNECT_OK",
+    threadcom_send_data(ctrl_io_ctx->inproc_ctrl_io_socket, "I-CONNECT-OK",
                         &di_addr, sizeof(uint16_t));
 
     // start event loop -- takes over thread
@@ -536,7 +445,7 @@ static void* thread_ctrl_io_main(void *ctrl_io_ctx_void)
 
     // when we reach this point the loop has been terminated either through a
     // signal or a control message
-    threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "DISCONNECT_OK");
+    threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "I-DISCONNECT-OK");
 
 free_return:
     zloop_destroy(&ctrl_zloop);
@@ -553,15 +462,6 @@ free_return:
     return 0;
 }
 
-/**
- * Create new osd_hostmod instance
- *
- * @param[out] ctx the osd_hostmod_ctx context to be created
- * @param[in] log_ctx the log context to be used. Set to NULL to disable logging
- * @return OSD_OK on success, any other value indicates an error
- *
- * @see osd_hostmod_free()
- */
 API_EXPORT
 osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
                            struct osd_log_ctx *log_ctx)
@@ -569,8 +469,6 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     struct osd_hostmod_ctx *c = calloc(1, sizeof(struct osd_hostmod_ctx));
     assert(c);
 
-    pthread_mutex_init(&c->reg_access_lock, 0);
-    pthread_cond_init(&c->reg_access_complete, 0);
     c->log_ctx = log_ctx;
     c->is_connected = 0;
 
@@ -579,31 +477,14 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     return OSD_OK;
 }
 
-/**
- * Get the DI address assigned to this host debug module
- *
- * The address is assigned during the connection, i.e. you need to call
- * osd_hostmod_connect() before calling this function.
- *
- * @param ctx the osd_hostmod_ctx context object
- * @return the address assigned to this debug module
- */
 API_EXPORT
-uint16_t osd_hostmod_get_addr(struct osd_hostmod_ctx *ctx)
+uint16_t osd_hostmod_get_diaddr(struct osd_hostmod_ctx *ctx)
 {
     assert(ctx);
     assert(ctx->is_connected);
-    return ctx->addr;
+    return ctx->diaddr;
 }
 
-/**
- * Connect to the host controller
- *
- * @param ctx the osd_hostmod_ctx context object
- * @return OSD_OK on success, any other value indicates an error
- *
- * @see osd_hostmod_disconnect()
- */
 osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
                                const char* host_controller_address)
 {
@@ -615,6 +496,12 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
     zsock_t *inproc_ctrl_io_socket = zsock_new_pair("@inproc://ctrl_io");
     assert(inproc_ctrl_io_socket);
     ctx->inproc_ctrl_io_socket = inproc_ctrl_io_socket;
+
+    // To support I/O with timeouts (e.g. reading a register with a timeout)
+    // we need the ZeroMQ receive functions to time out as well.
+    // If fully blocking behavior is required, manually loop on the zmsg_recv()
+    // calls.
+    zsock_set_rcvtimeo(ctx->inproc_ctrl_io_socket, ZMQ_RCV_TIMEOUT);
 
     // prepare I/O thread context (will be handed over to the thread)
     struct osd_hostmod_ctrl_io_ctx* ctrl_io_ctx = calloc(1, sizeof(struct osd_hostmod_ctrl_io_ctx));
@@ -633,15 +520,15 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
         return OSD_ERROR_CONNECTION_FAILED;
     }
     zframe_t *status_frame = zmsg_pop(msg);
-    if (zframe_streq(status_frame, "CONNECT_OK")) {
+    if (zframe_streq(status_frame, "I-CONNECT-OK")) {
         zframe_t *di_addr_frame = zmsg_pop(msg);
         assert(zframe_size(di_addr_frame) == sizeof(uint16_t));
         uint16_t *di_addr = (uint16_t*)zframe_data(di_addr_frame);
-        ctx->addr = *di_addr;
+        ctx->diaddr = *di_addr;
         zframe_destroy(&di_addr_frame);
 
         ctx->is_connected = 1;
-    } else if (zframe_streq(status_frame, "CONNECT_FAIL")) {
+    } else if (zframe_streq(status_frame, "I-CONNECT-FAIL")) {
         ctx->is_connected = 1;
     }
     zframe_destroy(&status_frame);
@@ -651,20 +538,11 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
         return OSD_ERROR_CONNECTION_FAILED;
     }
 
-    dbg(ctx->log_ctx, "Connection established, DI address is %u\n", ctx->addr);
+    dbg(ctx->log_ctx, "Connection established, DI address is %u\n", ctx->diaddr);
 
     return OSD_OK;
 }
 
-/**
- * Is the connection to the device active?
- *
- * @param ctx the osd_hostmod context object
- * @return 1 if connected, 0 if not connected
- *
- * @see osd_hostmod_connect()
- * @see osd_hostmod_disconnect()
- */
 API_EXPORT
 int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
 {
@@ -673,14 +551,6 @@ int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
     return ctx->is_connected;
 }
 
-/**
- * Shut down all communication with the device
- *
- * @param ctx the osd_hostmod context object
- * @return OSD_OK on success, any other value indicates an error
- *
- * @see osd_hostmod_run()
- */
 osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
 {
     assert(ctx);
@@ -690,7 +560,7 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
     }
 
     // signal control I/O thread to shut down
-    threadcom_send_status(ctx->inproc_ctrl_io_socket, "DISCONNECT");
+    threadcom_send_status(ctx->inproc_ctrl_io_socket, "I-DISCONNECT");
 
     // wait for disconnect to happen
     zmsg_t *msg = zmsg_recv(ctx->inproc_ctrl_io_socket);
@@ -698,7 +568,7 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
         return OSD_ERROR_FAILURE;
     }
     zframe_t *status_frame = zmsg_pop(msg);
-    if (!zframe_streq(status_frame, "DISCONNECT_OK")) {
+    if (!zframe_streq(status_frame, "I-DISCONNECT-OK")) {
         zframe_destroy(&status_frame);
         zmsg_destroy(&msg);
         return OSD_ERROR_FAILURE;
@@ -716,43 +586,21 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
     return OSD_OK;
 }
 
-/**
- * Free a communication API context object
- *
- * Call osd_hostmod_disconnect() before calling this function.
- *
- * @param ctx the osd_com context object
- */
 API_EXPORT
-void osd_hostmod_free(struct osd_hostmod_ctx *ctx)
+void osd_hostmod_free(struct osd_hostmod_ctx **ctx_p)
 {
-    assert(ctx);
+    assert(ctx_p);
+    struct osd_hostmod_ctx *ctx = *ctx_p;
+    if (!ctx) {
+        return;
+    }
+
     assert(ctx->is_connected == 0);
 
-    pthread_mutex_destroy(&ctx->reg_access_lock);
-
     free(ctx);
+    *ctx_p = NULL;
 }
 
-/**
- * Read a register of a module in the debug system
- *
- * Unless the flag OSD_COM_WAIT_FOREVER has been set this function waits up to
- * REG_ACCESS_TIMEOUT_NS ns for the register access to complete.
- *
- * @param ctx the osd_com context object
- * @param module_addr the module address to read the register from
- * @param reg_addr the address of the register to read
- * @param reg_size_bit size of the register in bit.
- *                     Supported values: 16, 32, 64 and 128.
- * @param[out] result the result of the register read. Preallocate a variable
- *                    large enough to hold @p reg_size_bit bits.
- * @param flags flags. Set OSD_COM_WAIT_FOREVER to block indefinitely until the
- *              access succeeds.
- * @return OSD_OK on success, any other value indicates an error
- * @return OSD_ERROR_TIMEDOUT if the register read timed out (only if
- *         OSD_COM_WAIT_FOREVER is not set)
- */
 API_EXPORT
 osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
                                 const uint16_t module_addr,
@@ -766,6 +614,9 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
 
     osd_result retval = OSD_ERROR_FAILURE;
     osd_result rv;
+
+    // block register read indefinitely until response has been received
+    bool do_block = (flags & OSD_HOSTMOD_BLOCKING);
 
     dbg(ctx->log_ctx, "Issuing %d bit read request to register 0x%x of module "
         "0x%x\n", reg_size_bit, reg_addr, module_addr);
@@ -786,7 +637,7 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
         type_sub = REQ_READ_REG_128;
         break;
     default:
-        assert(0); // API calling error
+        assert(0 && "API calling error");
     }
 
     // assemble request packet
@@ -798,7 +649,7 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
         goto err_free_req;
     }
 
-    osd_packet_set_header(pkg_read_req, module_addr, ctx->addr,
+    osd_packet_set_header(pkg_read_req, module_addr, ctx->diaddr,
                           OSD_PACKET_TYPE_REG, type_sub);
     pkg_read_req->data.payload[0] = reg_addr;
 
@@ -812,10 +663,16 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
 
     // wait for response
     struct osd_packet *pkg_read_resp;
-    osd_hostmod_receive_packet(ctx, &pkg_read_resp);
-    assert(osd_packet_get_type(pkg_read_resp) == OSD_PACKET_TYPE_REG);
+    do {
+        rv = osd_hostmod_receive_packet(ctx, &pkg_read_resp);
+    } while (rv == OSD_ERROR_TIMEDOUT && do_block);
+    if (OSD_FAILED(rv)) {
+        retval = rv;
+        goto err_free_req;
+    }
 
     // parse response
+    assert(osd_packet_get_type(pkg_read_resp) == OSD_PACKET_TYPE_REG);
     enum osd_packet_type_reg_subtype resp_type_sub_exp;
     switch (reg_size_bit) {
     case 16:

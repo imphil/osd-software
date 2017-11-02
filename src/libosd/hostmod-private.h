@@ -24,19 +24,13 @@ struct osd_hostmod_ctx {
     struct osd_log_ctx *log_ctx;
 
     /** Address assigned to this module in the debug interconnect */
-    uint16_t addr;
+    uint16_t diaddr;
 
     /** communication socket to the host controller */
     zsock_t *inproc_ctrl_io_socket;
 
     /** Control data receive thread */
     pthread_t thread_ctrl_io;
-    /** Lock protecting all register accesses */
-    pthread_mutex_t reg_access_lock;
-    /** Register access response has been received */
-    pthread_cond_t reg_access_complete;
-    /** Last received control packet */
-    struct osd_packet *rcv_ctrl_packet;
 
     /** system information */
     struct osd_system_info system_info;

@@ -73,7 +73,11 @@ AC_PROG_MKDIR_P
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.10])
 
 # test memory checking with valgrind
+# All other Valgrind tools show too many false positives to be useful
 AX_VALGRIND_DFLT([memcheck], [on])
+AX_VALGRIND_DFLT([sgcheck], [off])
+AX_VALGRIND_DFLT([helgrind], [off])
+AX_VALGRIND_DFLT([drd], [off])
 AX_VALGRIND_CHECK
 
 # test coverage with gcov and reporting with lcov

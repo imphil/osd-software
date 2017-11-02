@@ -1,3 +1,29 @@
+/* Copyright (c) 2017 by the author(s)
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ * ============================================================================
+ *
+ * Author(s):
+ *   Philipp Wagner <philipp.wagner@tum.de>
+ */
+
 #include <check.h>
 
 #include <osd/osd.h>
@@ -187,7 +213,7 @@ static void mock_add_expected_reg_access(unsigned int dest,
     pkg_read_req->data.payload[0] = reg_addr;
 
     mock_add_expected_di_packet(mock_exp_req_list, pkg_read_req);
-    osd_packet_free(pkg_read_req);
+    osd_packet_free(&pkg_read_req);
 
     // response
     struct osd_packet *pkg_read_resp;
@@ -200,7 +226,7 @@ static void mock_add_expected_reg_access(unsigned int dest,
     pkg_read_resp->data.payload[0] = ret_value;
 
     mock_add_expected_di_packet(mock_exp_resp_list, pkg_read_resp);
-    osd_packet_free(pkg_read_resp);
+    osd_packet_free(&pkg_read_resp);
 }
 
 /**
@@ -253,7 +279,7 @@ void setup_hostmod(void)
 
     ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 1);
 
-    ck_assert_uint_eq(osd_hostmod_get_addr(hostmod_ctx), mock_hostmod_diaddr);
+    ck_assert_uint_eq(osd_hostmod_get_diaddr(hostmod_ctx), mock_hostmod_diaddr);
 }
 
 void teardown_hostmod(void)
@@ -267,7 +293,8 @@ void teardown_hostmod(void)
 
     ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 0);
 
-    osd_hostmod_free(hostmod_ctx);
+    osd_hostmod_free(&hostmod_ctx);
+    ck_assert_ptr_eq(hostmod_ctx, NULL);
 }
 
 void teardown_zeromq(void)
@@ -348,7 +375,7 @@ START_TEST(test_core_read_register_timeout)
     pkg_read_req->data.payload[0] = 0x0000;
 
     mock_add_expected_di_packet(mock_exp_req_list, pkg_read_req);
-    osd_packet_free(pkg_read_req);
+    osd_packet_free(&pkg_read_req);
 
     rv = osd_hostmod_reg_read(hostmod_ctx, 1, 0x0000, 16, &reg_read_result, 0);
     ck_assert_int_eq(rv, OSD_ERROR_TIMEDOUT);
@@ -374,7 +401,7 @@ Suite * suite(void)
     tc_core = tcase_create("Core");
     tcase_add_checked_fixture(tc_core, setup, teardown);
     tcase_add_test(tc_core, test_core_read_register);
-    //tcase_add_test(tc_core, test_core_read_register_timeout);
+    tcase_add_test(tc_core, test_core_read_register_timeout);
     suite_add_tcase(s, tc_core);
 
     return s;

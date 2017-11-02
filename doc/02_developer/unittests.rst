@@ -40,12 +40,9 @@ To build and execute all tests and to finally generate a coverage report as HTML
    firefox tests/unit/opensocdebug-*-coverage/index.html
 
 
-To check the code for memory errors you can run the unit test suite under Valgrind.
+To check the code for memory errors you can run the unit test suite under Valgrind with its `memcheck <http://valgrind.org/docs/manual/mc-manual.html`_ tool.
 
 .. code-block:: sh
 
-   # all tests with all Valgrind tools
+   # run all tests with Valgrind
    make check-valgrind
-   
-   # all tests with the Valgrind tool "memcheck"
-   make check-valgrind-memcheck

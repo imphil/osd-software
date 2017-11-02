@@ -1,4 +1,31 @@
-#pragma once
+/* Copyright (c) 2017 by the author(s)
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ * ============================================================================
+ *
+ * Author(s):
+ *   Philipp Wagner <philipp.wagner@tum.de>
+ */
+
+#ifndef OSD_PACKET_H
+#define OSD_PACKET_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,20 +104,74 @@ enum osd_packet_type_reg_subtype {
 #define DP_HEADER_DEST_SHIFT     0
 #define DP_HEADER_DEST_MASK      ((1 << 16) - 1)
 
-const uint16_t osd_packet_get_data_size_words_from_payload(const unsigned int size_payload);
+/**
+ * Allocate memory for a packet with given data size and zero all data fields
+ *
+ * The osd_packet.size field is set to the allocated size.
+ *
+ * @param[out] packet the packet to be allocated
+ * @param[in]  data_size_words number of uint16_t words in the packet, including the
+ *             header words.
+ * @return the allocated packet, or NULL if allocation fails
+ */
 osd_result osd_packet_new(struct osd_packet **packet,
                           size_t size_data_words);
-void osd_packet_free(struct osd_packet *packet);
+
+/**
+ * Free the memory associated with the packet and NULL the object
+ */
+void osd_packet_free(struct osd_packet **packet);
+
+/**
+ * Extract the DEST field out of a packet
+ */
 unsigned int osd_packet_get_dest(const struct osd_packet *packet);
+
+/**
+ * Extract the SRC field out of a packet
+ */
 unsigned int osd_packet_get_src(const struct osd_packet *packet);
+
+/**
+ * Extract the TYPE field out of a packet
+ */
 unsigned int osd_packet_get_type(const struct osd_packet *packet);
+
+/**
+ * Extract the TYPE_SUB field out of a packet
+ */
 unsigned int osd_packet_get_type_sub(const struct osd_packet *packet);
+
+/**
+ * Populate the header of a osd_packet
+ *
+ * @param packet
+ * @param dest     packet destination
+ * @param src      packet source
+ * @param type     packet type
+ * @param type_sub packet subtype
+ *
+ * @return OSD_OK on success, any other value indicates an error
+ */
 osd_result osd_packet_set_header(struct osd_packet* packet,
                                  const unsigned int dest,
                                  const unsigned int src,
                                  const enum osd_packet_type type,
                                  const unsigned int type_sub);
+
+/**
+ * Size in bytes of a packet
+ */
 size_t osd_packet_sizeof(struct osd_packet *packet);
+
+/**
+ * Get the data size including all headers for a given payload size
+ */
+const uint16_t osd_packet_get_data_size_words_from_payload(const unsigned int size_payload);
+
+/**
+ * Write a debug message to the log with the contents of a packet
+ */
 void osd_packet_log(const struct osd_packet *packet,
                     struct osd_log_ctx *log_ctx);
 
@@ -99,3 +180,5 @@ void osd_packet_log(const struct osd_packet *packet,
 #ifdef __cplusplus
 }
 #endif
+
+#endif // OSD_PACKET_H
