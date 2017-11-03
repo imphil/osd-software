@@ -274,7 +274,7 @@ void setup_hostmod(void)
     snprintf(mock_hostmod_diaddr_str, 12, "%d", mock_hostmod_diaddr);
     mock_add_expected_mgmt_req("DIADDR_REQUEST", mock_hostmod_diaddr_str);
 
-    osd_hostmod_connect(hostmod_ctx, "inproc://testing");
+    rv = osd_hostmod_connect(hostmod_ctx, "inproc://testing");
     ck_assert_int_eq(rv, OSD_OK);
 
     ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 1);
@@ -288,7 +288,7 @@ void teardown_hostmod(void)
 
     ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 1);
 
-    osd_hostmod_disconnect(hostmod_ctx);
+    rv = osd_hostmod_disconnect(hostmod_ctx);
     ck_assert_int_eq(rv, OSD_OK);
 
     ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 0);
@@ -336,6 +336,32 @@ START_TEST(test_init_base)
 {
     setup();
     teardown();
+}
+END_TEST
+
+/**
+ * Test how hostmod copes with the host controller not being reachable
+ */
+START_TEST(test_init_hostctrl_unreachable)
+{
+    osd_result rv;
+
+    // log context
+    rv = osd_log_new(&log_ctx, LOG_DEBUG, osd_log_handler);
+    ck_assert_int_eq(rv, OSD_OK);
+
+    // initialize hostmod context
+    rv = osd_hostmod_new(&hostmod_ctx, log_ctx);
+    ck_assert_int_eq(rv, OSD_OK);
+    ck_assert_ptr_ne(hostmod_ctx, NULL);
+
+    ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 0);
+
+    // try to connect
+    rv = osd_hostmod_connect(hostmod_ctx, "inproc://testing");
+    ck_assert_int_eq(rv, OSD_ERROR_CONNECTION_FAILED);
+
+    ck_assert_int_eq(osd_hostmod_is_connected(hostmod_ctx), 0);
 }
 END_TEST
 
@@ -395,6 +421,7 @@ Suite * suite(void)
     // succeeds.
     tc_init = tcase_create("Init");
     tcase_add_test(tc_init, test_init_base);
+    tcase_add_test(tc_init, test_init_hostctrl_unreachable);
     suite_add_tcase(s, tc_init);
 
     // Core functionality

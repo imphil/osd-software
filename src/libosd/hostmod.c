@@ -350,8 +350,8 @@ static osd_result obtain_diaddr(struct osd_hostmod_ctrl_io_ctx *ctx, uint16_t *d
     errno = 0;
     zmsg_t *msg_resp = zmsg_recv(sock);
     if (!msg_resp) {
-        err(ctx->log_ctx, "No response received from host controller: %s (%d)\n",
-            strerror(errno), errno);
+        err(ctx->log_ctx, "No response received from host controller at %s: %s (%d)\n",
+            ctx->host_controller_address, strerror(errno), errno);
         return OSD_ERROR_CONNECTION_FAILED;
     }
 
@@ -484,7 +484,7 @@ uint16_t osd_hostmod_get_diaddr(struct osd_hostmod_ctx *ctx)
     assert(ctx->is_connected);
     return ctx->diaddr;
 }
-
+API_EXPORT
 osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
                                const char* host_controller_address)
 {
@@ -501,7 +501,12 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
     // we need the ZeroMQ receive functions to time out as well.
     // If fully blocking behavior is required, manually loop on the zmsg_recv()
     // calls.
-    zsock_set_rcvtimeo(ctx->inproc_ctrl_io_socket, ZMQ_RCV_TIMEOUT);
+    // We need to use a slightly higher timeout for the internal communication
+    // than for the external communication: if an external communication fails,
+    // the I/O thread must be able to recognize this by the timeout, and then
+    // inform the main thread. If both threads follow the same timeout, the
+    // I/O thread cannot inform the main thread of timeouts.
+    zsock_set_rcvtimeo(ctx->inproc_ctrl_io_socket, 1.5 * ZMQ_RCV_TIMEOUT);
 
     // prepare I/O thread context (will be handed over to the thread)
     struct osd_hostmod_ctrl_io_ctx* ctrl_io_ctx = calloc(1, sizeof(struct osd_hostmod_ctrl_io_ctx));
@@ -517,7 +522,8 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
     // wait for connection to be established
     zmsg_t *msg = zmsg_recv(ctx->inproc_ctrl_io_socket);
     if (!msg) {
-        return OSD_ERROR_CONNECTION_FAILED;
+        ctx->is_connected = 0;
+        goto ret;
     }
     zframe_t *status_frame = zmsg_pop(msg);
     if (zframe_streq(status_frame, "I-CONNECT-OK")) {
@@ -529,12 +535,16 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 
         ctx->is_connected = 1;
     } else if (zframe_streq(status_frame, "I-CONNECT-FAIL")) {
-        ctx->is_connected = 1;
+        ctx->is_connected = 0;
     }
     zframe_destroy(&status_frame);
     zmsg_destroy(&msg);
 
+ret:
     if (!ctx->is_connected) {
+        pthread_join(ctx->thread_ctrl_io, NULL);
+        zsock_destroy(&ctx->inproc_ctrl_io_socket);
+        err(ctx->log_ctx, "Unable to establish connection to host controller.\n");
         return OSD_ERROR_CONNECTION_FAILED;
     }
 
@@ -550,7 +560,7 @@ int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
 
     return ctx->is_connected;
 }
-
+API_EXPORT
 osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
 {
     assert(ctx);
