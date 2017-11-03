@@ -56,33 +56,3 @@ struct osd_hostmod_ctrl_io_ctx {
     /** Inprocess communication with the main thread */
     zsock_t *inproc_ctrl_io_socket;
 };
-
-
-/**
- * Debug Transport Datagram
- */
-typedef uint16_t* osd_dtd;
-
-size_t osd_dtd_get_size_words(osd_dtd dtd);
-osd_result osd_packet_get_dtd(struct osd_packet *packet, osd_dtd *dtd);
-osd_result osd_dtd_to_packet(osd_dtd dtd, struct osd_packet** packet);
-
-// register maps
-// base register map (common across all debug modules)
-#define REG_BASE_MOD_VENDOR      0x0000 /* module type */
-#define REG_BASE_MOD_TYPE        0x0001 /* module version */
-#define REG_BASE_MOD_VERSION     0x0002 /* module vendor */
-#define REG_BASE_MOD_CS          0x0003 /* control and status */
-  #define REG_BASE_MOD_CS_ACTIVE   BIT(0) /* activate/stall module */
-#define REG_BASE_MOD_EVENT_DEST  0x0004 /* event destination */
-  #define REG_BASE_MOD_EVENT_DEST_ADDR_SHIFT 0
-  #define REG_BASE_MOD_EVENT_DEST_ADDR_MASK  ((1 << 10) - 1)
-
-// SCM register map
-#define REG_SCM_SYSTEM_VENDOR_ID 0x0200
-#define REG_SCM_SYSTEM_DEVICE_ID 0x0201
-#define REG_SCM_NUM_MOD          0x0202
-#define REG_SCM_MAX_PKT_LEN      0x0203
-#define REG_SCM_SYSRST           0x0204
-  #define REG_SCM_SYSRST_SYS_RST   BIT(0)
-  #define REG_SCM_SYSRST_CPU_RST   BIT(1)

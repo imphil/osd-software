@@ -261,27 +261,6 @@ struct osd_version {
     const char *suffix;
 };
 
-/**
- * Module type identifiers for the standard-defined modules (vendor id 0x01)
- */
-enum osd_module_type {
-    MOD_STD_SCM = 1, //!< Subnet Control Module (SCM)
-    MOD_STD_DEM_UART = 2, //!< Device Emulation Module UART (DEM_UART)
-    MOD_STD_MAM = 3, //!< Memory Access Module (MAM)
-    MOD_STD_STM = 4, //!< System Trace Module (STM)
-    MOD_STD_CTM = 5 //!< Core Trace Module (CTM)
-};
-
-/**
- * A single module instance in the Open SoC Debug system
- */
-struct osd_module_desc {
-    uint16_t addr;    //!< Module address
-    uint16_t vendor;  //!< Module version
-    uint16_t type;    //!< Module type
-    uint16_t version; //!< Module version
-};
-
 const struct osd_version * osd_version_get(void);
 
 /**

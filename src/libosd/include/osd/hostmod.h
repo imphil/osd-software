@@ -29,6 +29,7 @@
 
 
 #include <osd/osd.h>
+#include <osd/module.h>
 
 #include <stdlib.h>
 #include <czmq.h>
@@ -147,6 +148,13 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
  * @return the address assigned to this debug module
  */
 uint16_t osd_hostmod_get_diaddr(struct osd_hostmod_ctx *ctx);
+
+/**
+ * Get the description fields of a debug module (type, vendor, version)
+ */
+osd_result osd_hostmod_describe_module(struct osd_hostmod_ctx *ctx,
+                                       uint16_t di_addr,
+                                       struct osd_module_desc *desc);
 
 
 /**@}*/ /* end of doxygen group libosd-hostmod */

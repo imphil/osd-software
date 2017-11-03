@@ -2,8 +2,16 @@ check_PROGRAMS = \
 	check_log \
 	check_util \
 	check_packet \
-	check_hostmod
-#	check_com
+	check_hostmod \
+	check_hostmod_stmlogger
+
+check_hostmod_SOURCES = \
+	check_hostmod.c \
+	mock_host_controller.c
+
+check_hostmod_stmlogger_SOURCES = \
+	check_hostmod_stmlogger.c \
+	mock_host_controller.c
 
 TESTS = $(check_PROGRAMS)
 

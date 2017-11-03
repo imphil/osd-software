@@ -40,13 +40,18 @@
 
 static const char* DEFAULT_CONFIG_FILE = "/etc/osd/osd.conf";
 
+/**
+ * Default ZeroMQ endpoint of the host controller
+ */
+#define DEFAULT_HOSTCTRL_EP "tcp://localhost:9537"
+
 void cli_log(int priority, const char* category,
              const char *format, ...) __attribute__ ((format (printf, 3, 4)));
 
 #define dbg(arg...) cli_log(LOG_DEBUG, CLI_TOOL_PROGNAME, ## arg)
 #define info(arg...) cli_log(LOG_INFO, CLI_TOOL_PROGNAME, ## arg)
 #define err(arg...) cli_log(LOG_ERR, CLI_TOOL_PROGNAME, ## arg)
-#define fatal(arg...) { cli_log(LOG_CRIT, CLI_TOOL_PROGNAME, ## arg); exit(1); }
+#define fatal(arg...) cli_log(LOG_CRIT, CLI_TOOL_PROGNAME, ## arg);
 
 struct config {
     int log_level;

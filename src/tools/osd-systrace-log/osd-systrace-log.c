@@ -32,83 +32,54 @@
 #define CLI_TOOL_SHORTDESC "Open SoC Debug system trace logger"
 
 #include "../cli-util.h"
-#include <czmq.h>
-#include <osd/hostmod.h>
+#include <osd/hostmod_stmlogger.h>
 
-zsock_t *server_socket;
-
-static void mgmt_send_ack(const zframe_t* dest)
-{
-    zmsg_t* msg = zmsg_new();
-    zframe_t* dest_new = zframe_dup(dest);
-    zmsg_add(msg, dest_new);
-    zmsg_addstr(msg, "M");
-    zmsg_addstr(msg, "ACK");
-    zmsg_send(&msg, server_socket);
-    zmsg_destroy(&msg);
-}
-
-static void process_mgmt_msg(const zframe_t* src, const zframe_t* payload_frame)
-{
-    char* msg = zframe_strdup(payload_frame);
-    dbg("Received management message %s\n", msg);
-    free(msg);
-
-    mgmt_send_ack(src);
-}
-
-static void process_data_msg(const zframe_t* src, const zframe_t* payload_frame)
-{
-#if 0
-    uint16_t* client_addr = zhash_lookup(hash, routing_id);
-    if (client_addr != NULL) {
-      printf("Client is known to server already with address %u\n", *client_addr);
-    } else {
-      printf("Client unknown, recording its address.\n");
-      uint16_t *value = malloc(sizeof(uint16_t));
-      *value = next_addr++;
-      zhash_insert(hash, routing_id, value);
-    }
-#endif
-}
+// command line arguments
+struct arg_int *a_stm_diaddr;
+struct arg_str *a_hostctrl_ep;
 
 osd_result setup(void)
 {
-    // XXX: nothing to do right now
+    a_hostctrl_ep = arg_str0("c", "hostctrl", "<URL>", "ZeroMQ endpoint of the host controller (default: "DEFAULT_HOSTCTRL_EP")");
+    a_hostctrl_ep->sval[0] = DEFAULT_HOSTCTRL_EP;
+    osd_tool_add_arg(a_hostctrl_ep);
+
+    a_stm_diaddr = arg_int1("a", "diaddr", "<diaddr>",
+                              "DI address of the STM module");
+    osd_tool_add_arg(a_stm_diaddr);
+
     return OSD_OK;
 }
 
 int run(void)
 {
+    int prog_ret = -1;
     osd_result osd_rv;
 
-    // prepare OSD logging system
     struct osd_log_ctx *osd_log_ctx;
     osd_rv = osd_log_new(&osd_log_ctx, cfg.log_level, &osd_log_handler);
+    assert(OSD_SUCCEEDED(osd_rv));
+
+    struct osd_hostmod_stmlogger_ctx *hostmod_stmlogger_ctx;
+    osd_rv = osd_hostmod_stmlogger_new(&hostmod_stmlogger_ctx, osd_log_ctx, a_stm_diaddr->ival[0]);
+    assert(OSD_SUCCEEDED(osd_rv));
+
+    osd_rv = osd_hostmod_stmlogger_connect(hostmod_stmlogger_ctx, a_hostctrl_ep->sval[0]);
     if (OSD_FAILED(osd_rv)) {
-        fatal("Unable to create osd_log_ctx (rv=%d).\n", osd_rv);
+        fatal("Unable to connect to host controller at %s (rv=%d).\n",
+              a_hostctrl_ep->sval[0], osd_rv);
+        prog_ret = -1;
+        goto free_return;
     }
 
-    // create host module
-    struct osd_hostmod_ctx *hostmod_ctx;
-    osd_rv = osd_hostmod_new(&hostmod_ctx, osd_log_ctx);
-    if (OSD_FAILED(osd_rv)) {
-        fatal("Unable to create hostmod_ctx (rv=%d).\n", osd_rv);
-    }
+    prog_ret = 0;
 
-    // connect to subnet controller
-    osd_rv = osd_hostmod_connect(hostmod_ctx, "tcp://localhost:9990");
-    if (OSD_FAILED(osd_rv)) {
-        fatal("Unable to connect to host controller (rv=%d).\n", osd_rv);
-    }
 
-    uint16_t address = osd_hostmod_get_diaddr(hostmod_ctx);
-    info("Our address in the debug network is %u\n", address);
-
-    osd_hostmod_disconnect(hostmod_ctx);
-    osd_hostmod_free(&hostmod_ctx);
+free_return:
+    osd_hostmod_stmlogger_disconnect(hostmod_stmlogger_ctx);
+    osd_hostmod_stmlogger_free(&hostmod_stmlogger_ctx);
 
     osd_log_free(&osd_log_ctx);
 
-    return 0;
+    return prog_ret;
 }

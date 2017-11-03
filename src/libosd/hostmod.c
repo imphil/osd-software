@@ -28,6 +28,7 @@
 #include <osd/osd.h>
 #include <osd/hostmod.h>
 #include <osd/packet.h>
+#include <osd/reg.h>
 #include "osd-private.h"
 
 #include <assert.h>
@@ -95,16 +96,9 @@ static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
     // get osd_packet from frame data
     zframe_t *data_frame = zmsg_pop(msg);
     assert(data_frame);
-    uint16_t *data = (uint16_t*)zframe_data(data_frame);
-    size_t data_size_bytes = zframe_size(data_frame);
-    size_t data_size_words = data_size_bytes / sizeof(uint16_t);
-    assert(data);
-    assert(data_size_words >= 3); // 3 header words
-
     struct osd_packet *p;
-    osd_rv = osd_packet_new(&p, data_size_words);
+    osd_rv = osd_packet_new_from_zframe(&p, data_frame);
     assert(OSD_SUCCEEDED(osd_rv));
-    memcpy(p->data_raw, data, data_size_bytes);
 
     zframe_destroy(&data_frame);
     zmsg_destroy(&msg);
@@ -117,6 +111,7 @@ static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
 /**
  * Read the system information from the device, as stored in the SCM
  */
+#if 0
 static osd_result read_system_info_from_device(struct osd_hostmod_ctx *ctx)
 {
     osd_result rv;
@@ -146,32 +141,29 @@ static osd_result read_system_info_from_device(struct osd_hostmod_ctx *ctx)
 
     return OSD_OK;
 }
+#endif
 
-static osd_result discover_debug_module(struct osd_hostmod_ctx *ctx,
-                                        uint16_t module_addr)
+API_EXPORT
+osd_result osd_hostmod_describe_module(struct osd_hostmod_ctx *ctx,
+                                       uint16_t di_addr,
+                                       struct osd_module_desc *desc)
 {
-    assert(module_addr < ctx->modules_len);
-
     osd_result rv;
-    struct osd_module_desc* desc;
-    desc = &ctx->modules[module_addr];
 
-    desc->addr = module_addr;
-
-    rv = osd_hostmod_reg_read(ctx, module_addr, REG_BASE_MOD_TYPE, 16,
-                          &desc->type, 0);
+    rv = osd_hostmod_reg_read(ctx, di_addr, OSD_REG_BASE_MOD_VENDOR, 16,
+                              &desc->vendor, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
-    rv = osd_hostmod_reg_read(ctx, module_addr, REG_BASE_MOD_VENDOR, 16,
-                          &desc->vendor, 0);
+    rv = osd_hostmod_reg_read(ctx, di_addr, OSD_REG_BASE_MOD_TYPE, 16,
+                              &desc->type, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
-    rv = osd_hostmod_reg_read(ctx, module_addr, REG_BASE_MOD_VERSION, 16,
-                          &desc->version, 0);
+    rv = osd_hostmod_reg_read(ctx, di_addr, OSD_REG_BASE_MOD_VERSION, 16,
+                              &desc->version, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
@@ -179,6 +171,7 @@ static osd_result discover_debug_module(struct osd_hostmod_ctx *ctx,
     return OSD_OK;
 }
 
+#if 0
 /**
  * Enumerate all modules in the debug system
  *
@@ -217,6 +210,7 @@ static osd_result enumerate_debug_modules(struct osd_hostmod_ctx *ctx)
     dbg(ctx->log_ctx, "Enumerated completed.\n");
     return ret;
 }
+#endif
 
 /**
  * Process messages from the main thread to the ctrl_io thread

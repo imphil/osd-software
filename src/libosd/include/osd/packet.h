@@ -27,6 +27,8 @@
 #ifndef OSD_PACKET_H
 #define OSD_PACKET_H
 
+#include <czmq.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -118,6 +120,14 @@ osd_result osd_packet_new(struct osd_packet **packet,
                           size_t size_data_words);
 
 /**
+ * Create a new packet from a zframe
+ *
+ * @see osd_packet_new()
+ */
+osd_result osd_packet_new_from_zframe(struct osd_packet **packet,
+                                      const zframe_t *frame);
+
+/**
  * Free the memory associated with the packet and NULL the object
  */
 void osd_packet_free(struct osd_packet **packet);
@@ -162,7 +172,7 @@ osd_result osd_packet_set_header(struct osd_packet* packet,
 /**
  * Size in bytes of a packet
  */
-size_t osd_packet_sizeof(struct osd_packet *packet);
+size_t osd_packet_sizeof(const struct osd_packet *packet);
 
 /**
  * Get the data size including all headers for a given payload size
@@ -174,6 +184,8 @@ const uint16_t osd_packet_get_data_size_words_from_payload(const unsigned int si
  */
 void osd_packet_log(const struct osd_packet *packet,
                     struct osd_log_ctx *log_ctx);
+void osd_packet_dump(const struct osd_packet *packet, FILE* fd);
+void osd_packet_to_string(const struct osd_packet *packet, char** str);
 
 /**@}*/ /* end of doxygen group libosd-packet */
 

@@ -1,11 +1,18 @@
-pkginclude_HEADERS = include/osd/osd.h \
-	include/osd/hostmod.h
+pkginclude_HEADERS =\
+	include/osd/osd.h \
+	include/osd/reg.h \
+	include/osd/module.h \
+	include/osd/hostmod.h \
+	include/osd/hostmod_stmlogger.h
 
 lib_LTLIBRARIES = libosd.la
 
-libosd_la_SOURCES = log.c \
+libosd_la_SOURCES =\
+	log.c \
+	module.c \
 	packet.c \
 	hostmod.c \
+	hostmod_stmlogger.c \
 	util.c
 
 libosd_la_LDFLAGS = \
