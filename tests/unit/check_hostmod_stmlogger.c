@@ -99,18 +99,26 @@ END_TEST
 
 START_TEST(test_core_tracestart)
 {
-    mock_host_controller_expect_reg_access(mock_hostmod_diaddr,
+    mock_host_controller_expect_reg_read(mock_hostmod_diaddr,
                                            mock_stm_diaddr,
                                            OSD_REG_BASE_MOD_VENDOR,
                                            OSD_MODULE_VENDOR_OSD);
-    mock_host_controller_expect_reg_access(mock_hostmod_diaddr,
+    mock_host_controller_expect_reg_read(mock_hostmod_diaddr,
                                            mock_stm_diaddr,
                                            OSD_REG_BASE_MOD_TYPE,
                                            OSD_MODULE_TYPE_STD_STM);
-    mock_host_controller_expect_reg_access(mock_hostmod_diaddr,
+    mock_host_controller_expect_reg_read(mock_hostmod_diaddr,
                                            mock_stm_diaddr,
                                            OSD_REG_BASE_MOD_VERSION,
                                            0);
+    mock_host_controller_expect_reg_write(mock_hostmod_diaddr,
+                                          mock_stm_diaddr,
+                                          OSD_REG_BASE_MOD_EVENT_DEST,
+                                          mock_hostmod_diaddr);
+    mock_host_controller_expect_reg_write(mock_hostmod_diaddr,
+                                          mock_stm_diaddr,
+                                          OSD_REG_BASE_MOD_CS,
+                                          OSD_REG_BASE_MOD_CS_ACTIVE);
     osd_hostmod_stmlogger_tracestart(mod_ctx);
 }
 END_TEST

@@ -605,70 +605,56 @@ void osd_hostmod_free(struct osd_hostmod_ctx **ctx_p)
     *ctx_p = NULL;
 }
 
-API_EXPORT
-osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
-                                const uint16_t module_addr,
-                                const uint16_t reg_addr, const int reg_size_bit,
-                                void *result, const int flags)
+static osd_result osd_hostmod_regaccess(struct osd_hostmod_ctx *ctx,
+                                        uint16_t module_addr,
+                                        uint16_t reg_addr,
+                                        enum osd_packet_type_reg_subtype subtype_req,
+                                        enum osd_packet_type_reg_subtype subtype_resp,
+                                        uint16_t *wr_data,
+                                        size_t wr_data_len_words,
+                                        struct osd_packet **response,
+                                        int flags)
 {
     assert(ctx);
     if (!ctx->is_connected) {
         return OSD_ERROR_NOT_CONNECTED;
     }
 
+    *response = NULL;
     osd_result retval = OSD_ERROR_FAILURE;
     osd_result rv;
 
     // block register read indefinitely until response has been received
     bool do_block = (flags & OSD_HOSTMOD_BLOCKING);
 
-    dbg(ctx->log_ctx, "Issuing %d bit read request to register 0x%x of module "
-        "0x%x\n", reg_size_bit, reg_addr, module_addr);
-
-    // determine type_sub
-    enum osd_packet_type_reg_subtype type_sub;
-    switch (reg_size_bit) {
-    case 16:
-        type_sub = REQ_READ_REG_16;
-        break;
-    case 32:
-        type_sub = REQ_READ_REG_32;
-        break;
-    case 64:
-        type_sub = REQ_READ_REG_64;
-        break;
-    case 128:
-        type_sub = REQ_READ_REG_128;
-        break;
-    default:
-        assert(0 && "API calling error");
-    }
-
     // assemble request packet
-    struct osd_packet *pkg_read_req;
-    rv = osd_packet_new(&pkg_read_req,
-                        osd_packet_get_data_size_words_from_payload(1));
+    struct osd_packet *pkg_req;
+    unsigned int payload_size = osd_packet_get_data_size_words_from_payload(1 + wr_data_len_words);
+    rv = osd_packet_new(&pkg_req, payload_size);
     if (OSD_FAILED(rv)) {
         retval = rv;
         goto err_free_req;
     }
 
-    osd_packet_set_header(pkg_read_req, module_addr, ctx->diaddr,
-                          OSD_PACKET_TYPE_REG, type_sub);
-    pkg_read_req->data.payload[0] = reg_addr;
+    osd_packet_set_header(pkg_req, module_addr, ctx->diaddr,
+                          OSD_PACKET_TYPE_REG, subtype_req);
+    pkg_req->data.payload[0] = reg_addr;
+    for (unsigned int i = 0; i < wr_data_len_words; i++) {
+        pkg_req->data.payload[1 + i] = wr_data[i];
+    }
 
 
     // send register read request
-    rv = osd_hostmod_send_packet(ctx, pkg_read_req);
+    rv = osd_hostmod_send_packet(ctx, pkg_req);
     if (OSD_FAILED(rv)) {
         retval = rv;
         goto err_free_req;
     }
 
     // wait for response
-    struct osd_packet *pkg_read_resp;
+    struct osd_packet *pkg_resp;
     do {
-        rv = osd_hostmod_receive_packet(ctx, &pkg_read_resp);
+        rv = osd_hostmod_receive_packet(ctx, &pkg_resp);
     } while (rv == OSD_ERROR_TIMEDOUT && do_block);
     if (OSD_FAILED(rv)) {
         retval = rv;
@@ -676,65 +662,138 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
     }
 
     // parse response
-    assert(osd_packet_get_type(pkg_read_resp) == OSD_PACKET_TYPE_REG);
-    enum osd_packet_type_reg_subtype resp_type_sub_exp;
-    switch (reg_size_bit) {
-    case 16:
-        resp_type_sub_exp = RESP_READ_REG_SUCCESS_16;
-        break;
-    case 32:
-        resp_type_sub_exp = RESP_READ_REG_SUCCESS_32;
-        break;
-    case 64:
-        resp_type_sub_exp = RESP_READ_REG_SUCCESS_64;
-        break;
-    case 128:
-        resp_type_sub_exp = RESP_READ_REG_SUCCESS_128;
-        break;
-    default:
-        assert(0 && "API calling error");
-    }
+    assert(osd_packet_get_type(pkg_resp) == OSD_PACKET_TYPE_REG);
 
     // handle register read error
-    if (osd_packet_get_type_sub(pkg_read_resp) == RESP_READ_REG_ERROR) {
-        err(ctx->log_ctx, "Device returned RESP_READ_REG_ERROR as register "
-            "read response.\n");
+    if (osd_packet_get_type_sub(pkg_resp) == RESP_READ_REG_ERROR ||
+        osd_packet_get_type_sub(pkg_resp) == RESP_WRITE_REG_ERROR) {
+        err(ctx->log_ctx,
+            "Device returned error packet %u when accessing the register.\n",
+            osd_packet_get_type_sub(pkg_resp));
         retval = OSD_ERROR_DEVICE_ERROR;
         goto err_free_resp;
     }
 
     // validate response subtype
-    if (osd_packet_get_type_sub(pkg_read_resp) != resp_type_sub_exp) {
+    if (osd_packet_get_type_sub(pkg_resp) != subtype_resp) {
         err(ctx->log_ctx, "Expected register response of subtype %d, got %d\n",
-            resp_type_sub_exp,
-            osd_packet_get_type_sub(pkg_read_resp));
+            subtype_resp,
+            osd_packet_get_type_sub(pkg_resp));
         retval = OSD_ERROR_DEVICE_INVALID_DATA;
         goto err_free_resp;
     }
 
+
+    retval = OSD_OK;
+    *response = pkg_resp;
+    goto err_free_req;
+
+err_free_resp:
+    free(pkg_resp);
+
+err_free_req:
+    free(pkg_req);
+
+    return retval;
+}
+
+static enum osd_packet_type_reg_subtype get_subtype_reg_read_req(unsigned int reg_size_bit)
+{
+    return (reg_size_bit / 16) - 1;
+}
+
+static enum osd_packet_type_reg_subtype get_subtype_reg_read_success_resp(unsigned int reg_size_bit)
+{
+    return get_subtype_reg_read_req(reg_size_bit) | 0b1000;
+}
+
+static enum osd_packet_type_reg_subtype get_subtype_reg_write_req(unsigned int reg_size_bit)
+{
+    return ((reg_size_bit / 16) - 1) | 0b0100;
+}
+
+API_EXPORT
+osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
+                                uint16_t module_addr, uint16_t reg_addr,
+                                int reg_size_bit, void *result, int flags)
+{
+    osd_result rv;
+    osd_result retval;
+
+    assert(reg_size_bit % 16 == 0 && reg_size_bit <= 128);
+
+    dbg(ctx->log_ctx, "Issuing %d bit read request to register 0x%x of module "
+        "0x%x\n", reg_size_bit, reg_addr, module_addr);
+
+    struct osd_packet *response_pkg;
+    rv = osd_hostmod_regaccess(ctx, module_addr, reg_addr,
+                               get_subtype_reg_read_req(reg_size_bit),
+                               get_subtype_reg_read_success_resp(reg_size_bit),
+                               NULL, 0,
+                               &response_pkg, flags);
+    if (OSD_FAILED(rv)) {
+        return rv;
+    }
+
     // validate response size
-    unsigned int exp_data_size_words = 3 /* header */ +
-            reg_size_bit / 16 /* payload */;
-    if (pkg_read_resp->data_size_words != exp_data_size_words) {
+    unsigned int exp_data_size_words = osd_packet_get_data_size_words_from_payload(reg_size_bit / 16);
+    if (response_pkg->data_size_words != exp_data_size_words) {
         err(ctx->log_ctx, "Expected %d 16 bit data words in register read "
             "response, got %d.\n",
             exp_data_size_words,
-            pkg_read_resp->data_size_words);
+            response_pkg->data_size_words);
         retval = OSD_ERROR_DEVICE_INVALID_DATA;
         goto err_free_resp;
     }
 
     // make result available to caller
-    memcpy(result, pkg_read_resp->data.payload, reg_size_bit / 8);
+    memcpy(result, response_pkg->data.payload, reg_size_bit / 8);
 
 
     retval = OSD_OK;
 
 err_free_resp:
-    free(pkg_read_resp);
+    free(response_pkg);
 
-err_free_req:
-    free(pkg_read_req);
+    return retval;
+}
+
+API_EXPORT
+osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
+                                 uint16_t module_addr, uint16_t reg_addr,
+                                 int reg_size_bit,
+                                 void *data, int flags)
+{
+    assert(reg_size_bit % 16 == 0 && reg_size_bit <= 128);
+
+    osd_result rv;
+    osd_result retval;
+
+    dbg(ctx->log_ctx, "Issuing %d bit write request to register 0x%x of module "
+        "0x%x\n", reg_size_bit, reg_addr, module_addr);
+
+    struct osd_packet *response_pkg;
+    rv = osd_hostmod_regaccess(ctx, module_addr, reg_addr,
+                               get_subtype_reg_write_req(reg_size_bit),
+                               RESP_WRITE_REG_SUCCESS,
+                               data, reg_size_bit / 16,
+                               &response_pkg, flags);
+    if (OSD_FAILED(rv)) {
+        return rv;
+    }
+
+    // validate response size
+    if (response_pkg->data_size_words != 0) {
+        err(ctx->log_ctx, "Expected packet with no payload, got %d payload words.\n",
+            response_pkg->data_size_words);
+        retval = OSD_ERROR_DEVICE_INVALID_DATA;
+        goto err_free_resp;
+    }
+
+    retval = OSD_OK;
+
+err_free_resp:
+    free(response_pkg);
 
     return retval;
 }

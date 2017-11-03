@@ -34,6 +34,8 @@
  * @{
  */
 
+#define BIT(x)                (1UL << (x))
+
 // register maps
 // base register map (common across all debug modules)
 #define OSD_REG_BASE_MOD_VENDOR      0x0000 /* module type */
@@ -42,8 +44,11 @@
 #define OSD_REG_BASE_MOD_CS          0x0003 /* control and status */
   #define OSD_REG_BASE_MOD_CS_ACTIVE   BIT(0) /* activate/stall module */
 #define OSD_REG_BASE_MOD_EVENT_DEST  0x0004 /* event destination */
+
+/* unused with new format; keep as reference for other SHIFT/MASK use cases
   #define OSD_REG_BASE_MOD_EVENT_DEST_ADDR_SHIFT 0
   #define OSD_REG_BASE_MOD_EVENT_DEST_ADDR_MASK  ((1 << 10) - 1)
+*/
 
 // SCM register map
 #define OSD_REG_SCM_SYSTEM_VENDOR_ID 0x0200

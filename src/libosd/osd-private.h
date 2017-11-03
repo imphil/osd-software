@@ -125,7 +125,6 @@ static inline void timespec_add_ns(struct timespec *a, uint64_t ns)
     a->tv_nsec = ns;
 }
 
-#define BIT(x)                (1UL << (x))
 //#define BIT_MASK(x)           (1UL << ((x) % BITS_PER_LONG))
 
 #endif // OSD_OSD_PRIVATE_H

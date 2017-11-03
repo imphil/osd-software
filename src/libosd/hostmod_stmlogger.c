@@ -83,7 +83,8 @@ static bool is_stm_module(struct osd_hostmod_stmlogger_ctx *ctx)
     }
 
     if (desc.vendor != OSD_MODULE_VENDOR_OSD ||
-        desc.type != OSD_MODULE_TYPE_STD_STM) {
+        desc.type != OSD_MODULE_TYPE_STD_STM ||
+        desc.version != 0) {
         return false;
     }
 
@@ -97,6 +98,14 @@ osd_result osd_hostmod_stmlogger_tracestart(struct osd_hostmod_stmlogger_ctx *ct
         err(ctx->log_ctx, "Unable to start tracing: module %u is no STM.\n",
             ctx->stm_di_addr);
     }
+
+    uint16_t event_dest = osd_hostmod_get_diaddr(ctx->hostmod_ctx);
+    osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
+                          OSD_REG_BASE_MOD_EVENT_DEST, 16, &event_dest, 0);
+
+    uint16_t cs = OSD_REG_BASE_MOD_CS_ACTIVE;
+    osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
+                          OSD_REG_BASE_MOD_CS, 16, &cs, 0);
 
     return OSD_OK;
 }

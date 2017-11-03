@@ -133,10 +133,15 @@ int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx);
  *         OSD_HOSTMOD_BLOCKING is not set)
  */
 osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
-                                const uint16_t module_addr,
-                                const uint16_t reg_addr,
-                                const int reg_size_bit, void *result,
-                                const int flags);
+                                uint16_t module_addr,
+                                uint16_t reg_addr,
+                                int reg_size_bit, void *result,
+                                int flags);
+
+osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
+                                 uint16_t module_addr, uint16_t reg_addr,
+                                 int reg_size_bit,
+                                 void *data, int flags);
 
 /**
  * Get the DI address assigned to this host debug module

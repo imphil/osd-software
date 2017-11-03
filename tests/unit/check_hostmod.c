@@ -138,7 +138,7 @@ START_TEST(test_core_read_register)
 
     uint16_t reg_read_result;
 
-    mock_host_controller_expect_reg_access(mock_hostmod_diaddr, 1, 0x0000, 0x0001);
+    mock_host_controller_expect_reg_read(mock_hostmod_diaddr, 1, 0x0000, 0x0001);
 
     rv = osd_hostmod_reg_read(hostmod_ctx, 1, 0x0000, 16, &reg_read_result, 0);
     ck_assert_int_eq(rv, OSD_OK);

@@ -37,6 +37,7 @@ static int mock_host_controller_msg_reactor(zloop_t *loop, zsock_t *reader, void
     zmsg_print(msg_req);
 
     zmsg_t* msg_req_exp = zlist_pop(mock_exp_req_list);
+    ck_assert_msg(msg_req_exp, "Received message, but no message was expected.\n");
     printf("Expecting message: \n");
     zmsg_print(msg_req_exp);
 
@@ -206,40 +207,77 @@ void mock_host_controller_expect_diaddr_req(unsigned int diaddr)
  * Note that the @p ret_value is not checked by the mock, you need to check
  * in the test if the returned value arrived where it should.
  */
-void mock_host_controller_expect_reg_access(unsigned int src,
-                                            unsigned int dest,
-                                            unsigned int reg_addr,
-                                            unsigned int ret_value)
+void mock_host_controller_expect_reg_read(unsigned int src,
+                                          unsigned int dest,
+                                          unsigned int reg_addr,
+                                          uint16_t ret_value)
 {
     osd_result rv;
 
     // request
-    struct osd_packet *pkg_read_req;
-    rv = osd_packet_new(&pkg_read_req,
+    struct osd_packet *pkg_req;
+    rv = osd_packet_new(&pkg_req,
                         osd_packet_get_data_size_words_from_payload(1));
     ck_assert_int_eq(rv, OSD_OK);
-    ck_assert_ptr_ne(pkg_read_req, NULL);
+    ck_assert_ptr_ne(pkg_req, NULL);
 
-    osd_packet_set_header(pkg_read_req, dest, src,
+    osd_packet_set_header(pkg_req, dest, src,
                           OSD_PACKET_TYPE_REG, REQ_READ_REG_16);
-    pkg_read_req->data.payload[0] = reg_addr;
+    pkg_req->data.payload[0] = reg_addr;
 
     // response
-    struct osd_packet *pkg_read_resp;
-    rv = osd_packet_new(&pkg_read_resp,
+    struct osd_packet *pkg_resp;
+    rv = osd_packet_new(&pkg_resp,
                         osd_packet_get_data_size_words_from_payload(1));
     ck_assert_int_eq(rv, OSD_OK);
 
-    osd_packet_set_header(pkg_read_resp, src, dest,
+    osd_packet_set_header(pkg_resp, src, dest,
                           OSD_PACKET_TYPE_REG, RESP_READ_REG_SUCCESS_16);
-    pkg_read_resp->data.payload[0] = ret_value;
+    pkg_resp->data.payload[0] = ret_value;
 
-    mock_host_controller_expect_data_req(pkg_read_req, pkg_read_resp);
-    osd_packet_free(&pkg_read_req);
-    osd_packet_free(&pkg_read_resp);
+    mock_host_controller_expect_data_req(pkg_req, pkg_resp);
+    osd_packet_free(&pkg_req);
+    osd_packet_free(&pkg_resp);
 }
 
+/**
+ * Add a 16 bit register access to the read/write mock
+ *
+ * Note that the @p ret_value is not checked by the mock, you need to check
+ * in the test if the returned value arrived where it should.
+ */
+void mock_host_controller_expect_reg_write(unsigned int src,
+                                           unsigned int dest,
+                                           unsigned int reg_addr,
+                                           uint16_t exp_write_value)
+{
+    osd_result rv;
 
+    // request
+    struct osd_packet *pkg_req;
+    rv = osd_packet_new(&pkg_req,
+                        osd_packet_get_data_size_words_from_payload(2));
+    ck_assert_int_eq(rv, OSD_OK);
+    ck_assert_ptr_ne(pkg_req, NULL);
+
+    osd_packet_set_header(pkg_req, dest, src,
+                          OSD_PACKET_TYPE_REG, REQ_WRITE_REG_16);
+    pkg_req->data.payload[0] = reg_addr;
+    pkg_req->data.payload[1] = exp_write_value;
+
+    // response
+    struct osd_packet *pkg_resp;
+    rv = osd_packet_new(&pkg_resp,
+                        osd_packet_get_data_size_words_from_payload(1));
+    ck_assert_int_eq(rv, OSD_OK);
+
+    osd_packet_set_header(pkg_resp, src, dest,
+                          OSD_PACKET_TYPE_REG, RESP_WRITE_REG_SUCCESS);
+
+    mock_host_controller_expect_data_req(pkg_req, pkg_resp);
+    osd_packet_free(&pkg_req);
+    osd_packet_free(&pkg_resp);
+}
 
 /**
  * Setup the ZeroMQ router standing in for the host controller in this test
