@@ -18,3 +18,7 @@ build:
     - make
     - make check
     - make check-valgrind
+
+  on_success:
+    - bash <(curl -s https://codecov.io/bash)
+
