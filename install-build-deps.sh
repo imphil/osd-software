@@ -5,13 +5,16 @@
 
 case $(lsb_release -is) in
   Ubuntu)
+    # Ubuntu seems to have a rather strange and inconsistent naming for the
+    # ZeroMQ packages ...
     sudo apt-get install \
       check \
       doxygen \
       python3 python3-venv python3-pip \
       lcov valgrind \
+      libzmq5 \
       libzmq3-dev \
-      libzmq3-dbg \
+      libzmq5-dbg \
       libczmq-dev \
       libczmq-dbg
     ;;
