@@ -7,7 +7,7 @@ build:
   ci:
     # Build and install GLIP as build dependency
     - git clone --depth 1 https://github.com/TUM-LIS/glip.git
-    - cd glip && ./autogen.sh && ./configure --prefix=$PWD/../glip-install && make && make install
+    - cd glip && ./autogen.sh && ./configure --prefix=$PWD/../glip-install && make && make install && cd ..
     - export PKG_CONFIG_PATH=$PWD/glip-install/lib/pkgconfig
 
     # Now build the actual OSD software
