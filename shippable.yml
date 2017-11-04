@@ -16,7 +16,7 @@ build:
     - ./autogen.sh
     - ./configure --enable-debug --enable-code-coverage --enable-valgrind
     - make
-    - make check
+    - make check-code-coverage
     - make check-valgrind
 
     # Copy test results where shippable.io finds them
