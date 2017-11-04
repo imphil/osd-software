@@ -11,15 +11,20 @@ addons:
       - python3.4-venv
       - python3-pip
       - lcov
+      - valgrind
+      - libzmq3-dev
+      - libczmq3-dev
 
 script:
   - ./autogen.sh
   - mkdir build
   - cd build
-  - ../configure --enable-code-coverage --disable-daemon
+  - ../configure --enable-code-coverage --disable-daemon --enable-debug
   - make
   - make check
+  - make check-valgrind
 
 after_success:
   # upload code coverage data
   - bash <(curl -s https://codecov.io/bash)
+

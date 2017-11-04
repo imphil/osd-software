@@ -185,6 +185,7 @@ static void sprintf_append(char** strp, const char *fmt, ...)
         size_t cur_size = strlen(*strp);
         *strp = realloc(*strp, cur_size + append_size + 1 /* \0 */);
         strncat(*strp, append_str, append_size);
+        free(append_str);
     }
 }
 

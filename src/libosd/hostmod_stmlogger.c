@@ -137,6 +137,8 @@ static osd_result handle_event_pkg(void* arg, struct osd_packet *pkg)
     osd_packet_dump(pkg, stdout);
     fflush(stdout);
 
+    osd_packet_free(&pkg);
+
     return OSD_OK;
 }
 

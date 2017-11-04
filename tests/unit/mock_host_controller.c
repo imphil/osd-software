@@ -55,6 +55,10 @@ static int mock_host_controller_msg_reactor(zloop_t *loop, zsock_t *reader, void
 
     // save the message source as destination for the response
     zframe_t *src_frame = zmsg_pop(msg_req);
+
+    // additionally, save the message source for sending event packets (which
+    // don't follow a strict request-response model)
+    zframe_destroy(&last_hostmod_identity_frame);
     last_hostmod_identity_frame = zframe_dup(src_frame);
 
     // ensure that the request message is what we expect
@@ -113,6 +117,8 @@ static int mock_host_controller_msg_reactor(zloop_t *loop, zsock_t *reader, void
         zmsg_prepend(msg_resp, &src_frame);
         zmsg_send(&msg_resp, reader);
     }
+
+    zframe_destroy(&src_frame);
 
     return 0;
 }

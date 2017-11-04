@@ -130,6 +130,7 @@ START_TEST(test_core_tracestart)
                           OSD_PACKET_TYPE_EVENT, 0);
     event_pkg->data.payload[0] = 0x0000;
     mock_host_controller_queue_event_packet(event_pkg);
+    osd_packet_free(&event_pkg);
 }
 END_TEST
 

@@ -277,19 +277,22 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
         osd_rv = osd_packet_new_from_zframe(&pkg, data_frame);
         assert(OSD_SUCCEEDED(osd_rv));
 
+        // Forward EVENT packets to handler function.
+        // Ownership of |pkg| is transferred to the event handler.
         if (osd_packet_get_type(pkg) == OSD_PACKET_TYPE_EVENT) {
-            // Forward EVENT packets to handler function.
-            // Ownership of |pkg| is transferred to the event handler.
             zmsg_destroy(&msg);
             osd_rv = ctx->event_handler(ctx->event_handler_arg, pkg);
             if (OSD_FAILED(osd_rv)) {
                 err(ctx->log_ctx, "Handling EVENT packet failed: %d\n", osd_rv);
             }
-        } else {
-            // Forward data messages to the main thread
-            rv = zmsg_send(&msg, ctx->inproc_ctrl_io_socket);
-            assert(rv == 0);
+            return 0;
         }
+
+        osd_packet_free(&pkg);
+
+        // Forward all other data messages to the main thread
+        rv = zmsg_send(&msg, ctx->inproc_ctrl_io_socket);
+        assert(rv == 0);
 
     } else if (zframe_streq(type_frame, "M")) {
         assert(0 && "TODO: Handle incoming management messages.");
