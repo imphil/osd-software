@@ -16,7 +16,8 @@ case $(lsb_release -is) in
       libzmq3-dev \
       libzmq5-dbg \
       libczmq-dev \
-      libczmq-dbg
+      libczmq-dbg \
+      xsltproc
     ;;
 
   *SUSE*)
@@ -26,7 +27,8 @@ case $(lsb_release -is) in
       python3 python3-pip \
       lcov valgrind \
       zeromq-devel zeromq \
-      czmq-devel czmq-debuginfo 
+      czmq-devel czmq-debuginfo \
+      xsltproc
     ;;
 
   *)

@@ -24,7 +24,9 @@
  *   Philipp Wagner <philipp.wagner@tum.de>
  */
 
-#include <check.h>
+#define TEST_SUITE_NAME "check_log"
+
+#include "testutil.h"
 
 #include <osd/osd.h>
 #include "../../src/libosd/osd-private.h"
@@ -98,12 +100,12 @@ START_TEST(test_log_constructorparams)
 }
 END_TEST
 
-Suite * log_suite(void)
+Suite * suite(void)
 {
     Suite *s;
     TCase *tc_core;
 
-    s = suite_create("libosd-log");
+    s = suite_create(TEST_SUITE_NAME);
 
     /* Core test case */
     tc_core = tcase_create("Core");
@@ -113,19 +115,4 @@ Suite * log_suite(void)
     suite_add_tcase(s, tc_core);
 
     return s;
-}
-
-int main(void)
-{
-    int number_failed;
-    Suite *s;
-    SRunner *sr;
-
-    s = log_suite();
-    sr = srunner_create(s);
-
-    srunner_run_all(sr, CK_NORMAL);
-    number_failed = srunner_ntests_failed(sr);
-    srunner_free(sr);
-    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

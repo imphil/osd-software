@@ -24,7 +24,9 @@
  *   Philipp Wagner <philipp.wagner@tum.de>
  */
 
-#include <check.h>
+#define TEST_SUITE_NAME "check_hostmod"
+
+#include "testutil.h"
 
 #include <osd/osd.h>
 #include <osd/hostmod.h>
@@ -180,7 +182,7 @@ Suite * suite(void)
     Suite *s;
     TCase *tc_init, *tc_core;
 
-    s = suite_create("libosd-hostmod");
+    s = suite_create(TEST_SUITE_NAME);
 
     // Initialization
     // As the setup and teardown functions are pretty heavy, we check them
@@ -199,19 +201,4 @@ Suite * suite(void)
     suite_add_tcase(s, tc_core);
 
     return s;
-}
-
-int main(void)
-{
-    int number_failed;
-    Suite *s;
-    SRunner *sr;
-
-    s = suite();
-    sr = srunner_create(s);
-
-    srunner_run_all(sr, CK_ENV);
-    number_failed = srunner_ntests_failed(sr);
-    srunner_free(sr);
-    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

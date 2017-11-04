@@ -24,8 +24,6 @@ LDADD = \
 	@CHECK_LIBS@ \
 	$(top_builddir)/src/libosd/libosd.la
 
-
-
 # Include make targets to generate code coverage reports
 CODE_COVERAGE_IGNORE_PATTERN = "/usr/*"
 @CODE_COVERAGE_RULES@
@@ -35,3 +33,16 @@ CODE_COVERAGE_IGNORE_PATTERN = "/usr/*"
 VALGRIND_memcheck_FLAGS = --leak-check=full
 #VALGRIND_SUPPRESSIONS_FILES = my-project.supp
 #EXTRA_DIST = my-project.supp
+
+# Incluede make target to convert check-style XML reports to JUnit-style reports
+JUNIT_XML_REPORTS = $(check_PROGRAMS:=.junit.xml)
+check-junit-xml: $(JUNIT_XML_REPORTS)
+%.junit.xml : %.xml
+	xsltproc $(top_srcdir)/tests/tools/check2junit.xsl $^ > $@
+
+# Include make target to convert lcov coverage data to cobertura XML
+coverage-cobertura-xml: coverage-cobertura.xml
+
+coverage-cobertura.xml: $(CODE_COVERAGE_OUTPUT_FILE)
+	python $(top_srcdir)/tests/tools/lcov_cobertura.py \
+		$^ --base-dir $(top_srcdir) --output $@
