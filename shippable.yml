@@ -6,6 +6,7 @@ compiler:
 build:
   ci:
     - ./install-build-deps.sh
+    - ./autogen.sh
     - ./configure --enable-debug --enable-code-coverage --enable-valgrind
     - make
     - make check
