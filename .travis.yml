@@ -13,7 +13,9 @@ addons:
       - lcov
       - valgrind
       - libzmq3-dev
-      - libczmq3-dev
+      - libzmq3-dbg
+      - libczmq-dev
+      - libczmq-dbg
 
 script:
   - ./autogen.sh

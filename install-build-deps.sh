@@ -11,7 +11,7 @@ case $(lsb_release -is) in
       python3 python3-venv python3-pip \
       lcov valgrind \
       libzmq3-dev \
-      libczmq3-dev
+      libczmq-dev
     ;;
 
   *SUSE*)
