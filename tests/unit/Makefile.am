@@ -27,6 +27,7 @@ LDADD = \
 # Include make targets to generate code coverage reports
 CODE_COVERAGE_IGNORE_PATTERN = "/usr/*"
 @CODE_COVERAGE_RULES@
+CODE_COVERAGE_BRANCH_COVERAGE=1
 
 # Include make targets to generate check targets with valgrind (check-valgrind)
 @VALGRIND_CHECK_RULES@
