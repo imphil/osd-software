@@ -188,12 +188,6 @@ static void sprintf_append(char** strp, const char *fmt, ...)
     }
 }
 
-/**
- * Dump the packet to a string (for human consumption)
- *
- * The string representation of a packet is for debugging purposes only and may
- * change at any time, do not rely on it for automated parsing.
- */
 API_EXPORT
 void osd_packet_to_string(const struct osd_packet *packet, char** str)
 {
@@ -219,14 +213,6 @@ void osd_packet_to_string(const struct osd_packet *packet, char** str)
     }
 }
 
-/**
- * Dump a packet in human-readable (debugging) form to a file stream
- *
- * @param packet packet to dump
- * @param fd stream to dump packet to. You can use stdout and stderr here.
- *
- * @see osd_packet_to_string()
- */
 API_EXPORT
 void osd_packet_dump(const struct osd_packet *packet, FILE* fd)
 {

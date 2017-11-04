@@ -91,21 +91,51 @@ static bool is_stm_module(struct osd_hostmod_stmlogger_ctx *ctx)
     return true;
 }
 
+/**
+ * Start tracing
+ *
+ * Instruct the STM module to start sending traces to us.
+ */
 API_EXPORT
 osd_result osd_hostmod_stmlogger_tracestart(struct osd_hostmod_stmlogger_ctx *ctx)
 {
+    osd_result rv;
     if (!is_stm_module(ctx)) {
         err(ctx->log_ctx, "Unable to start tracing: module %u is no STM.\n",
             ctx->stm_di_addr);
     }
 
     uint16_t event_dest = osd_hostmod_get_diaddr(ctx->hostmod_ctx);
-    osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
-                          OSD_REG_BASE_MOD_EVENT_DEST, 16, &event_dest, 0);
+    rv = osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
+                               OSD_REG_BASE_MOD_EVENT_DEST, 16, &event_dest, 0);
+    if (OSD_FAILED(rv)) {
+        return rv;
+    }
 
     uint16_t cs = OSD_REG_BASE_MOD_CS_ACTIVE;
+    rv = osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
+                               OSD_REG_BASE_MOD_CS, 16, &cs, 0);
+    if (OSD_FAILED(rv)) {
+        return rv;
+    }
+
+    return OSD_OK;
+}
+
+API_EXPORT
+osd_result osd_hostmod_stmlogger_tracestop(struct osd_hostmod_stmlogger_ctx *ctx)
+{
+    uint16_t cs = 0;
     osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
                           OSD_REG_BASE_MOD_CS, 16, &cs, 0);
+
+    return OSD_OK;
+}
+
+static osd_result handle_event_pkg(void* arg, struct osd_packet *pkg)
+{
+    osd_packet_dump(pkg, stdout);
+    fflush(stdout);
 
     return OSD_OK;
 }
@@ -114,6 +144,11 @@ API_EXPORT
 osd_result osd_hostmod_stmlogger_connect(struct osd_hostmod_stmlogger_ctx *ctx,
                                          const char* host_controller_address)
 {
+    osd_result rv;
+
+    rv = osd_hostmod_register_event_handler(ctx->hostmod_ctx, handle_event_pkg, NULL);
+    assert(OSD_SUCCEEDED(rv));
+
     return osd_hostmod_connect(ctx->hostmod_ctx, host_controller_address);
 }
 

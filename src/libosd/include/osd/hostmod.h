@@ -30,6 +30,7 @@
 
 #include <osd/osd.h>
 #include <osd/module.h>
+#include <osd/packet.h>
 
 #include <stdlib.h>
 #include <czmq.h>
@@ -111,7 +112,7 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx);
  * @see osd_hostmod_connect()
  * @see osd_hostmod_disconnect()
  */
-int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx);
+bool osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx);
 
 /**
  * Read a register of a module in the debug system
@@ -161,6 +162,27 @@ osd_result osd_hostmod_describe_module(struct osd_hostmod_ctx *ctx,
                                        uint16_t di_addr,
                                        struct osd_module_desc *desc);
 
+/**
+ * Event handler function prototype
+ *
+ * The ownership of packet is passed to the handler function.
+ */
+typedef osd_result (*osd_hostmod_event_handler_fn)(void */* arg */, struct osd_packet * /* packet */);
+
+/**
+ * Register a handler for received DI packets of type EVENT
+ *
+ * An event handler must be set before calling osd_hostmod_connect(). It is
+ * called whenever a new packet of type EVENT is received.
+ *
+ * @param ctx the context object
+ * @param event_handler the event handler function to register
+ * @param arg an arbitrary argument passed to the event handler when it is
+ *            called. Set to NULL if unused.
+ */
+osd_result osd_hostmod_register_event_handler(struct osd_hostmod_ctx *ctx,
+                                              osd_hostmod_event_handler_fn event_handler,
+                                              void *arg);
 
 /**@}*/ /* end of doxygen group libosd-hostmod */
 

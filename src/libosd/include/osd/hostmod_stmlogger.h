@@ -55,7 +55,7 @@ void osd_hostmod_stmlogger_free(struct osd_hostmod_stmlogger_ctx **ctx_p);
 
 struct osd_hostmod_ctx * osd_hostmod_stmlogger_get_hostmod_ctx(struct osd_hostmod_stmlogger_ctx *ctx);
 osd_result osd_hostmod_stmlogger_tracestart(struct osd_hostmod_stmlogger_ctx *ctx);
-
+osd_result osd_hostmod_stmlogger_tracestop(struct osd_hostmod_stmlogger_ctx *ctx);
 
 
 /**@}*/ /* end of doxygen group libosd-hostmod-stmlogger */

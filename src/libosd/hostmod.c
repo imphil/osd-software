@@ -54,7 +54,6 @@ static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
 
     rv = zmsg_addstr(msg, "D");
     assert(rv == 0);
-    dbg(ctx->log_ctx, "size: %d\n", packet->data_size_words);
     rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
     assert(rv == 0);
 
@@ -261,6 +260,7 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
 {
     struct osd_hostmod_ctrl_io_ctx* ctx = (struct osd_hostmod_ctrl_io_ctx*)ctx_void;
     int rv;
+    osd_result osd_rv;
 
     zmsg_t *msg = zmsg_recv(reader);
     if (!msg) {
@@ -270,9 +270,26 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
     zframe_t *type_frame = zmsg_first(msg);
     assert(type_frame);
     if (zframe_streq(type_frame, "D")) {
-        // forward data messages to the main thread
-        rv = zmsg_send(&msg, ctx->inproc_ctrl_io_socket);
-        assert(rv == 0);
+        zframe_t *data_frame = zmsg_next(msg);
+        assert(data_frame);
+
+        struct osd_packet *pkg;
+        osd_rv = osd_packet_new_from_zframe(&pkg, data_frame);
+        assert(OSD_SUCCEEDED(osd_rv));
+
+        if (osd_packet_get_type(pkg) == OSD_PACKET_TYPE_EVENT) {
+            // Forward EVENT packets to handler function.
+            // Ownership of |pkg| is transferred to the event handler.
+            zmsg_destroy(&msg);
+            osd_rv = ctx->event_handler(ctx->event_handler_arg, pkg);
+            if (OSD_FAILED(osd_rv)) {
+                err(ctx->log_ctx, "Handling EVENT packet failed: %d\n", osd_rv);
+            }
+        } else {
+            // Forward data messages to the main thread
+            rv = zmsg_send(&msg, ctx->inproc_ctrl_io_socket);
+            assert(rv == 0);
+        }
 
     } else if (zframe_streq(type_frame, "M")) {
         assert(0 && "TODO: Handle incoming management messages.");
@@ -464,7 +481,7 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     assert(c);
 
     c->log_ctx = log_ctx;
-    c->is_connected = 0;
+    c->is_connected = false;
 
     *ctx = c;
 
@@ -484,7 +501,7 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
 {
     int rv;
     assert(ctx);
-    assert(ctx->is_connected == 0);
+    assert(!ctx->is_connected);
 
     // Establish connection with control I/O thread
     zsock_t *inproc_ctrl_io_socket = zsock_new_pair("@inproc://ctrl_io");
@@ -506,7 +523,13 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
     struct osd_hostmod_ctrl_io_ctx* ctrl_io_ctx = calloc(1, sizeof(struct osd_hostmod_ctrl_io_ctx));
     ctrl_io_ctx->host_controller_address = strdup(host_controller_address);
     assert(ctrl_io_ctx->host_controller_address);
+
+    // We copy some data items needed in the I/O thread. This keeps the data
+    // structures clearly separated between the threads, making the code easier
+    // to audit.
     ctrl_io_ctx->log_ctx = ctx->log_ctx;
+    ctrl_io_ctx->event_handler = ctx->event_handler;
+    ctrl_io_ctx->event_handler_arg = ctx->event_handler_arg;
 
     // set up control I/O thread
     rv = pthread_create(&ctx->thread_ctrl_io, 0,
@@ -516,7 +539,7 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
     // wait for connection to be established
     zmsg_t *msg = zmsg_recv(ctx->inproc_ctrl_io_socket);
     if (!msg) {
-        ctx->is_connected = 0;
+        ctx->is_connected = false;
         goto ret;
     }
     zframe_t *status_frame = zmsg_pop(msg);
@@ -527,9 +550,9 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
         ctx->diaddr = *di_addr;
         zframe_destroy(&di_addr_frame);
 
-        ctx->is_connected = 1;
+        ctx->is_connected = true;
     } else if (zframe_streq(status_frame, "I-CONNECT-FAIL")) {
-        ctx->is_connected = 0;
+        ctx->is_connected = false;
     }
     zframe_destroy(&status_frame);
     zmsg_destroy(&msg);
@@ -548,12 +571,12 @@ ret:
 }
 
 API_EXPORT
-int osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
+bool osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx)
 {
     assert(ctx);
-
     return ctx->is_connected;
 }
+
 API_EXPORT
 osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
 {
@@ -580,7 +603,7 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
     zframe_destroy(&status_frame);
     zmsg_destroy(&msg);
 
-    ctx->is_connected = 0;
+    ctx->is_connected = false;
 
     // wait until control I/O thread has finished its cleanup
     pthread_join(ctx->thread_ctrl_io, NULL);
@@ -599,7 +622,7 @@ void osd_hostmod_free(struct osd_hostmod_ctx **ctx_p)
         return;
     }
 
-    assert(ctx->is_connected == 0);
+    assert(!ctx->is_connected);
 
     free(ctx);
     *ctx_p = NULL;
@@ -783,8 +806,10 @@ osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
     }
 
     // validate response size
-    if (response_pkg->data_size_words != 0) {
-        err(ctx->log_ctx, "Expected packet with no payload, got %d payload words.\n",
+    unsigned int data_size_words_exp = osd_packet_get_data_size_words_from_payload(0);
+    if (response_pkg->data_size_words != data_size_words_exp) {
+        err(ctx->log_ctx, "Invalid write response received. Expected packet "
+            "with %u data words, got %u words.\n", data_size_words_exp,
             response_pkg->data_size_words);
         retval = OSD_ERROR_DEVICE_INVALID_DATA;
         goto err_free_resp;
@@ -796,4 +821,16 @@ err_free_resp:
     free(response_pkg);
 
     return retval;
+}
+
+osd_result osd_hostmod_register_event_handler(struct osd_hostmod_ctx *ctx,
+                                              osd_hostmod_event_handler_fn event_handler,
+                                              void *arg)
+{
+    assert(!ctx->is_connected && "Set the event before connecting.");
+
+    ctx->event_handler = event_handler;
+    ctx->event_handler_arg = arg;
+
+    return OSD_OK;
 }

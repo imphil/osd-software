@@ -53,7 +53,7 @@ struct osd_packet {
             uint16_t dest;       //!< packet destination address
             uint16_t src;        //!< packet source address
             uint16_t flags;      //!< packet flags
-            uint16_t payload[0]; //!< (size_data - 3) words of payload
+            uint16_t payload[0]; //!< (size_data_words - 3) words of payload
         } data;
 
         uint16_t data_raw[0];    //!< size_data words of data
@@ -184,7 +184,25 @@ const uint16_t osd_packet_get_data_size_words_from_payload(const unsigned int si
  */
 void osd_packet_log(const struct osd_packet *packet,
                     struct osd_log_ctx *log_ctx);
+
+/**
+ * Dump a packet in human-readable (debugging) form to a file stream
+ *
+ * @param packet packet to dump
+ * @param fd stream to dump packet to. You can use stdout and stderr here.
+ *
+ * @see osd_packet_to_string()
+ */
 void osd_packet_dump(const struct osd_packet *packet, FILE* fd);
+
+/**
+ * Dump the packet to a string (for human consumption)
+ *
+ * The string representation of a packet is for debugging purposes only and may
+ * change at any time, do not rely on it for automated parsing.
+ *
+ * @see osd_packet_dump()
+ */
 void osd_packet_to_string(const struct osd_packet *packet, char** str);
 
 /**@}*/ /* end of doxygen group libosd-packet */

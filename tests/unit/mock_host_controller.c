@@ -14,10 +14,25 @@ volatile int mock_host_controller_thread_cancel;
 
 zlist_t *mock_exp_req_list;
 zlist_t *mock_exp_resp_list;
+zlist_t *mock_event_tx_list;
+
+zframe_t *last_hostmod_identity_frame;
+
+void mock_host_controller_wait_for_event_tx()
+{
+    while (zlist_size(mock_event_tx_list) != 0) {
+        usleep(10);
+    }
+}
 
 static int mock_host_controller_shutdown_reactor(zloop_t *loop, int timer_id, void *arg)
 {
     if (mock_host_controller_thread_cancel) {
+        // wait until all event packets have been sent before shutting down
+        if (zlist_size(mock_event_tx_list) != 0) {
+            return 0;
+        }
+
         // Returning -1 ends zloop
         return -1;
     }
@@ -25,9 +40,6 @@ static int mock_host_controller_shutdown_reactor(zloop_t *loop, int timer_id, vo
     return 0;
 }
 
-/**
- * Thread working as mock host controller
- */
 static int mock_host_controller_msg_reactor(zloop_t *loop, zsock_t *reader, void *arg)
 {
     zmsg_t * msg_req = zmsg_recv(reader);
@@ -43,6 +55,7 @@ static int mock_host_controller_msg_reactor(zloop_t *loop, zsock_t *reader, void
 
     // save the message source as destination for the response
     zframe_t *src_frame = zmsg_pop(msg_req);
+    last_hostmod_identity_frame = zframe_dup(src_frame);
 
     // ensure that the request message is what we expect
     zframe_t *f_rcv = zmsg_first(msg_req);
@@ -104,6 +117,30 @@ static int mock_host_controller_msg_reactor(zloop_t *loop, zsock_t *reader, void
     return 0;
 }
 
+/**
+ * Send a DI packet (a data message) of type EVENT to the host module
+ *
+ * This function is triggered by a timer. Use
+ * mock_host_controller_queue_event_packet() to queue DI event packets for
+ * sending.
+ */
+static int mock_host_controller_event_tx_reactor(zloop_t *loop, int timer_id, void *sock_void)
+{
+    zsock_t *sock = sock_void;
+
+    zmsg_t *event_msg = zlist_pop(mock_event_tx_list);
+    if (!event_msg) {
+        return 0;
+    }
+
+    zframe_t *identity_frame = zframe_dup(last_hostmod_identity_frame);
+    zmsg_prepend(event_msg, &identity_frame);
+    zmsg_send(&event_msg, sock);
+
+    return 0;
+}
+
+
 
 static void* mock_host_controller(void* arg)
 {
@@ -122,8 +159,12 @@ static void* mock_host_controller(void* arg)
     ck_assert_int_eq(rv, 0);
     zloop_reader_set_tolerant(mock_host_controller_loop, server_socket);
 
-    zloop_timer(mock_host_controller_loop, 200, 0,
+    zloop_timer(mock_host_controller_loop, 100, 0,
                 mock_host_controller_shutdown_reactor, NULL);
+    ck_assert_int_eq(rv, 0);
+
+    zloop_timer(mock_host_controller_loop, 10, 0,
+                mock_host_controller_event_tx_reactor, server_socket);
     ck_assert_int_eq(rv, 0);
 
     // start processing
@@ -136,6 +177,28 @@ static void* mock_host_controller(void* arg)
     zsock_destroy(&server_socket);
 
     return 0;
+}
+
+static void queue_data_packet(zlist_t *list, const struct osd_packet *packet)
+{
+    int rv;
+
+    zmsg_t *msg = zmsg_new();
+    ck_assert_ptr_ne(msg, NULL);
+
+    rv = zmsg_addstr(msg, "D");
+    ck_assert_int_eq(rv, 0);
+    rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
+    ck_assert_int_eq(rv, 0);
+
+    rv = zlist_append(list, msg);
+    ck_assert_int_eq(rv, 0);
+}
+
+osd_result mock_host_controller_queue_event_packet(const struct osd_packet *pkg)
+{
+    queue_data_packet(mock_event_tx_list, pkg);
+    return OSD_OK;
 }
 
 /**
@@ -163,22 +226,6 @@ void mock_host_controller_expect_mgmt_req(const char* cmd, const char* resp)
     rv = zmsg_addstr(resp_msg, resp);
     ck_assert_int_eq(rv, 0);
     rv = zlist_append(mock_exp_resp_list, resp_msg);
-    ck_assert_int_eq(rv, 0);
-}
-
-static void queue_data_packet(zlist_t *list, const struct osd_packet *packet)
-{
-    int rv;
-
-    zmsg_t *msg = zmsg_new();
-    ck_assert_ptr_ne(msg, NULL);
-
-    rv = zmsg_addstr(msg, "D");
-    ck_assert_int_eq(rv, 0);
-    rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
-    ck_assert_int_eq(rv, 0);
-
-    rv = zlist_append(list, msg);
     ck_assert_int_eq(rv, 0);
 }
 
@@ -268,7 +315,7 @@ void mock_host_controller_expect_reg_write(unsigned int src,
     // response
     struct osd_packet *pkg_resp;
     rv = osd_packet_new(&pkg_resp,
-                        osd_packet_get_data_size_words_from_payload(1));
+                        osd_packet_get_data_size_words_from_payload(0));
     ck_assert_int_eq(rv, OSD_OK);
 
     osd_packet_set_header(pkg_resp, src, dest,
@@ -294,6 +341,7 @@ void mock_host_controller_setup(void)
 
     mock_exp_req_list = zlist_new();
     mock_exp_resp_list = zlist_new();
+    mock_event_tx_list = zlist_new();
 
     // it takes a bit for the ZeroMQ socket to be ready
     while (!mock_host_controller_ready) {
@@ -303,6 +351,7 @@ void mock_host_controller_setup(void)
 
 void mock_host_controller_teardown(void)
 {
+    // wait until all event packets have been sent
     mock_host_controller_thread_cancel = 1;
 
     pthread_join(mock_host_controller_thread, NULL);
@@ -310,7 +359,9 @@ void mock_host_controller_teardown(void)
     // make sure all expected requests and responses have been received/sent
     ck_assert_uint_eq(zlist_size(mock_exp_req_list), 0);
     ck_assert_uint_eq(zlist_size(mock_exp_resp_list), 0);
+    ck_assert_uint_eq(zlist_size(mock_event_tx_list), 0);
 
     zlist_destroy(&mock_exp_req_list);
     zlist_destroy(&mock_exp_resp_list);
+    zlist_destroy(&mock_event_tx_list);
 }

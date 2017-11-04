@@ -86,6 +86,7 @@ void setup(void)
  */
 void teardown(void)
 {
+    mock_host_controller_wait_for_event_tx();
     teardown_hostmod();
     mock_host_controller_teardown();
 }
@@ -99,6 +100,7 @@ END_TEST
 
 START_TEST(test_core_tracestart)
 {
+    osd_result rv;
     mock_host_controller_expect_reg_read(mock_hostmod_diaddr,
                                            mock_stm_diaddr,
                                            OSD_REG_BASE_MOD_VENDOR,
@@ -119,7 +121,15 @@ START_TEST(test_core_tracestart)
                                           mock_stm_diaddr,
                                           OSD_REG_BASE_MOD_CS,
                                           OSD_REG_BASE_MOD_CS_ACTIVE);
-    osd_hostmod_stmlogger_tracestart(mod_ctx);
+    rv = osd_hostmod_stmlogger_tracestart(mod_ctx);
+    ck_assert(OSD_SUCCEEDED(rv));
+
+    struct osd_packet *event_pkg;
+    osd_packet_new(&event_pkg, osd_packet_get_data_size_words_from_payload(1));
+    osd_packet_set_header(event_pkg, mock_hostmod_diaddr, mock_stm_diaddr,
+                          OSD_PACKET_TYPE_EVENT, 0);
+    event_pkg->data.payload[0] = 0x0000;
+    mock_host_controller_queue_event_packet(event_pkg);
 }
 END_TEST
 
