@@ -1,0 +1,12 @@
+language: c
+
+compiler:
+  - gcc
+
+build:
+  ci:
+    - ./install-build-deps.sh
+    - ./configure --enable-debug --enable-code-coverage --enable-valgrind
+    - make
+    - make check
+    - make check-valgrind
