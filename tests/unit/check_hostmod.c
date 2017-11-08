@@ -142,7 +142,7 @@ START_TEST(test_core_read_register)
 
     mock_host_controller_expect_reg_read(mock_hostmod_diaddr, 1, 0x0000, 0x0001);
 
-    rv = osd_hostmod_reg_read(hostmod_ctx, 1, 0x0000, 16, &reg_read_result, 0);
+    rv = osd_hostmod_reg_read(hostmod_ctx, &reg_read_result, 1, 0x0000, 16, 0);
     ck_assert_int_eq(rv, OSD_OK);
     ck_assert_uint_eq(reg_read_result, 0x0001);
 }
@@ -172,7 +172,7 @@ START_TEST(test_core_read_register_timeout)
     mock_host_controller_expect_data_req(pkg_read_req, NULL);
     osd_packet_free(&pkg_read_req);
 
-    rv = osd_hostmod_reg_read(hostmod_ctx, 1, 0x0000, 16, &reg_read_result, 0);
+    rv = osd_hostmod_reg_read(hostmod_ctx, &reg_read_result, 1, 0x0000, 16, 0);
     ck_assert_int_eq(rv, OSD_ERROR_TIMEDOUT);
 }
 END_TEST

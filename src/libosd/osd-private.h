@@ -82,6 +82,12 @@ osd_log_null(struct osd_log_ctx *ctx, const char *format, ...) {}
  * instead, which fill in all details for you (e.g. file name, line number,
  * etc.).
  *
+ * Each call to osd_log() creates a self-contained log record. This has two
+ * implications:
+ * - Do not use repeated calls to osd_log() like printf(). Instead, assemble
+ *   the full message first, and then call osd_log() to create a log entry.
+ * - Do not add a newline character at the end of the message.
+ *
  * This function is thread safe.
  *
  * @param ctx      the log context

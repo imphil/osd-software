@@ -283,7 +283,7 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *ctx_void)
             zmsg_destroy(&msg);
             osd_rv = ctx->event_handler(ctx->event_handler_arg, pkg);
             if (OSD_FAILED(osd_rv)) {
-                err(ctx->log_ctx, "Handling EVENT packet failed: %d\n", osd_rv);
+                err(ctx->log_ctx, "Handling EVENT packet failed: %d", osd_rv);
             }
             return 0;
         }
@@ -356,7 +356,7 @@ static osd_result obtain_diaddr(struct osd_hostmod_ctrl_io_ctx *ctx, uint16_t *d
     assert(rv == 0);
     rv = zmsg_send(&msg_req, sock);
     if (rv != 0) {
-        err(ctx->log_ctx, "Unable to send DIADDR_REQUEST request to host controller\n");
+        err(ctx->log_ctx, "Unable to send DIADDR_REQUEST request to host controller");
         return OSD_ERROR_CONNECTION_FAILED;
     }
 
@@ -364,7 +364,7 @@ static osd_result obtain_diaddr(struct osd_hostmod_ctrl_io_ctx *ctx, uint16_t *d
     errno = 0;
     zmsg_t *msg_resp = zmsg_recv(sock);
     if (!msg_resp) {
-        err(ctx->log_ctx, "No response received from host controller at %s: %s (%d)\n",
+        err(ctx->log_ctx, "No response received from host controller at %s: %s (%d)",
             ctx->host_controller_address, strerror(errno), errno);
         return OSD_ERROR_CONNECTION_FAILED;
     }
@@ -384,7 +384,7 @@ static osd_result obtain_diaddr(struct osd_hostmod_ctrl_io_ctx *ctx, uint16_t *d
 
     zmsg_destroy(&msg_resp);
 
-    dbg(ctx->log_ctx, "Obtained DI address %u from host controller.\n",
+    dbg(ctx->log_ctx, "Obtained DI address %u from host controller.",
         *di_addr);
 
     return OSD_OK;
@@ -416,7 +416,7 @@ static void* thread_ctrl_io_main(void *ctrl_io_ctx_void)
     // create new DIALER socket for the control connection of this module
     ctrl_io_ctx->ctrl_socket = zsock_new_dealer(ctrl_io_ctx->host_controller_address);
     if (!ctrl_io_ctx->ctrl_socket) {
-        err(ctrl_io_ctx->log_ctx, "Unable to connect to %s\n",
+        err(ctrl_io_ctx->log_ctx, "Unable to connect to %s",
             ctrl_io_ctx->host_controller_address);
         threadcom_send_status(ctrl_io_ctx->inproc_ctrl_io_socket, "I-CONNECT-FAIL");
         goto free_return;
@@ -564,11 +564,11 @@ ret:
     if (!ctx->is_connected) {
         pthread_join(ctx->thread_ctrl_io, NULL);
         zsock_destroy(&ctx->inproc_ctrl_io_socket);
-        err(ctx->log_ctx, "Unable to establish connection to host controller.\n");
+        err(ctx->log_ctx, "Unable to establish connection to host controller.");
         return OSD_ERROR_CONNECTION_FAILED;
     }
 
-    dbg(ctx->log_ctx, "Connection established, DI address is %u\n", ctx->diaddr);
+    dbg(ctx->log_ctx, "Connection established, DI address is %u.", ctx->diaddr);
 
     return OSD_OK;
 }
@@ -636,7 +636,7 @@ static osd_result osd_hostmod_regaccess(struct osd_hostmod_ctx *ctx,
                                         uint16_t reg_addr,
                                         enum osd_packet_type_reg_subtype subtype_req,
                                         enum osd_packet_type_reg_subtype subtype_resp,
-                                        uint16_t *wr_data,
+                                        const uint16_t *wr_data,
                                         size_t wr_data_len_words,
                                         struct osd_packet **response,
                                         int flags)
@@ -694,7 +694,7 @@ static osd_result osd_hostmod_regaccess(struct osd_hostmod_ctx *ctx,
     if (osd_packet_get_type_sub(pkg_resp) == RESP_READ_REG_ERROR ||
         osd_packet_get_type_sub(pkg_resp) == RESP_WRITE_REG_ERROR) {
         err(ctx->log_ctx,
-            "Device returned error packet %u when accessing the register.\n",
+            "Device returned error packet %u when accessing the register.",
             osd_packet_get_type_sub(pkg_resp));
         retval = OSD_ERROR_DEVICE_ERROR;
         goto err_free_resp;
@@ -702,7 +702,7 @@ static osd_result osd_hostmod_regaccess(struct osd_hostmod_ctx *ctx,
 
     // validate response subtype
     if (osd_packet_get_type_sub(pkg_resp) != subtype_resp) {
-        err(ctx->log_ctx, "Expected register response of subtype %d, got %d\n",
+        err(ctx->log_ctx, "Expected register response of subtype %d, got %d",
             subtype_resp,
             osd_packet_get_type_sub(pkg_resp));
         retval = OSD_ERROR_DEVICE_INVALID_DATA;
@@ -740,8 +740,9 @@ static enum osd_packet_type_reg_subtype get_subtype_reg_write_req(unsigned int r
 
 API_EXPORT
 osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
-                                uint16_t module_addr, uint16_t reg_addr,
-                                int reg_size_bit, void *result, int flags)
+                                void *result,
+                                uint16_t diaddr, uint16_t reg_addr,
+                                int reg_size_bit, int flags)
 {
     osd_result rv;
     osd_result retval;
@@ -749,10 +750,10 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
     assert(reg_size_bit % 16 == 0 && reg_size_bit <= 128);
 
     dbg(ctx->log_ctx, "Issuing %d bit read request to register 0x%x of module "
-        "0x%x\n", reg_size_bit, reg_addr, module_addr);
+        "0x%x", reg_size_bit, reg_addr, diaddr);
 
     struct osd_packet *response_pkg;
-    rv = osd_hostmod_regaccess(ctx, module_addr, reg_addr,
+    rv = osd_hostmod_regaccess(ctx, diaddr, reg_addr,
                                get_subtype_reg_read_req(reg_size_bit),
                                get_subtype_reg_read_success_resp(reg_size_bit),
                                NULL, 0,
@@ -765,7 +766,7 @@ osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
     unsigned int exp_data_size_words = osd_packet_get_data_size_words_from_payload(reg_size_bit / 16);
     if (response_pkg->data_size_words != exp_data_size_words) {
         err(ctx->log_ctx, "Expected %d 16 bit data words in register read "
-            "response, got %d.\n",
+            "response, got %d.",
             exp_data_size_words,
             response_pkg->data_size_words);
         retval = OSD_ERROR_DEVICE_INVALID_DATA;
@@ -786,9 +787,9 @@ err_free_resp:
 
 API_EXPORT
 osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
-                                 uint16_t module_addr, uint16_t reg_addr,
-                                 int reg_size_bit,
-                                 void *data, int flags)
+                                 const void *data,
+                                 uint16_t diaddr, uint16_t reg_addr,
+                                 int reg_size_bit, int flags)
 {
     assert(reg_size_bit % 16 == 0 && reg_size_bit <= 128);
 
@@ -796,10 +797,10 @@ osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
     osd_result retval;
 
     dbg(ctx->log_ctx, "Issuing %d bit write request to register 0x%x of module "
-        "0x%x\n", reg_size_bit, reg_addr, module_addr);
+        "0x%x", reg_size_bit, reg_addr, diaddr);
 
     struct osd_packet *response_pkg;
-    rv = osd_hostmod_regaccess(ctx, module_addr, reg_addr,
+    rv = osd_hostmod_regaccess(ctx, diaddr, reg_addr,
                                get_subtype_reg_write_req(reg_size_bit),
                                RESP_WRITE_REG_SUCCESS,
                                data, reg_size_bit / 16,
@@ -812,7 +813,7 @@ osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
     unsigned int data_size_words_exp = osd_packet_get_data_size_words_from_payload(0);
     if (response_pkg->data_size_words != data_size_words_exp) {
         err(ctx->log_ctx, "Invalid write response received. Expected packet "
-            "with %u data words, got %u words.\n", data_size_words_exp,
+            "with %u data words, got %u words.", data_size_words_exp,
             response_pkg->data_size_words);
         retval = OSD_ERROR_DEVICE_INVALID_DATA;
         goto err_free_resp;

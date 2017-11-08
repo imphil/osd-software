@@ -117,32 +117,52 @@ bool osd_hostmod_is_connected(struct osd_hostmod_ctx *ctx);
 /**
  * Read a register of a module in the debug system
  *
- * Unless the flag OSD_COM_WAIT_FOREVER has been set this function waits up to
- * REG_ACCESS_TIMEOUT_NS ns for the register access to complete.
+ * Unless the flag OSD_HOSTMOD_BLOCKING has been set this function times out
+ * if the module does not reply within a ZMQ_RCV_TIMEOUT milliseconds.
  *
- * @param ctx the osd_com context object
- * @param module_addr the module address to read the register from
+ * @param ctx the osd_hostmod_ctx context object
+ * @param[out] result the result of the register read. Preallocate a variable
+ *                    large enough to hold @p reg_size_bit bits.
+ * @param diaddr the DI address of the module to read the register from
  * @param reg_addr the address of the register to read
  * @param reg_size_bit size of the register in bit.
  *                     Supported values: 16, 32, 64 and 128.
- * @param[out] result the result of the register read. Preallocate a variable
- *                    large enough to hold @p reg_size_bit bits.
+ * @param flags flags. Set OSD_HOSTMOD_BLOCKING to block indefinitely until the
+ *              access succeeds.
+ * @return OSD_OK on success, any other value indicates an error
+ * @return OSD_ERROR_TIMEDOUT if the register read timed out (only if
+ *         OSD_HOSTMOD_BLOCKING is not set)
+ *
+ * @see osd_hostmod_write()
+ */
+osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
+                                void *result,
+                                uint16_t diaddr,
+                                uint16_t reg_addr,
+                                int reg_size_bit,
+                                int flags);
+
+/**
+ * Write a register of a module in the debug system
+ *
+ * @param ctx the osd_hostmod_ctx context object
+ * @param data the data to be written. Provide enough data according to
+ *             @p reg_size_bit
+ * @param diaddr the DI address of the accessed module
+ * @param reg_addr the address of the register to read
+ * @param reg_size_bit size of the register in bit.
+ *                     Supported values: 16, 32, 64 and 128.
  * @param flags flags. Set OSD_HOSTMOD_BLOCKING to block indefinitely until the
  *              access succeeds.
  * @return OSD_OK on success, any other value indicates an error
  * @return OSD_ERROR_TIMEDOUT if the register read timed out (only if
  *         OSD_HOSTMOD_BLOCKING is not set)
  */
-osd_result osd_hostmod_reg_read(struct osd_hostmod_ctx *ctx,
-                                uint16_t module_addr,
-                                uint16_t reg_addr,
-                                int reg_size_bit, void *result,
-                                int flags);
-
 osd_result osd_hostmod_reg_write(struct osd_hostmod_ctx *ctx,
-                                 uint16_t module_addr, uint16_t reg_addr,
+                                 const void *data,
+                                 uint16_t diaddr, uint16_t reg_addr,
                                  int reg_size_bit,
-                                 void *data, int flags);
+                                 int flags);
 
 /**
  * Get the DI address assigned to this host debug module

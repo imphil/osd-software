@@ -1,6 +1,7 @@
 pkginclude_HEADERS =\
 	include/osd/osd.h \
 	include/osd/reg.h \
+	include/osd/packet.h \
 	include/osd/module.h \
 	include/osd/hostmod.h \
 	include/osd/hostmod_stmlogger.h

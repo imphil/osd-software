@@ -30,10 +30,10 @@ m4_define([OSD_VERSION_MICRO_], [0])
 m4_define([OSD_VERSION_SUFFIX_], [-dev])
 
 AC_PREREQ(2.60)
-AC_INIT([opensocdebug],
+AC_INIT([osd],
         [OSD_VERSION_MAJOR_[.]OSD_VERSION_MINOR_[.]OSD_VERSION_MICRO_[]OSD_VERSION_SUFFIX_],
         [opensocdebug@lists.librecores.org],
-        [opensocdebug],
+        [osd],
         [http://www.opensocdebug.org])
 
 # Library versioning
