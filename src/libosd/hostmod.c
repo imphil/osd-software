@@ -149,20 +149,20 @@ osd_result osd_hostmod_describe_module(struct osd_hostmod_ctx *ctx,
 {
     osd_result rv;
 
-    rv = osd_hostmod_reg_read(ctx, di_addr, OSD_REG_BASE_MOD_VENDOR, 16,
-                              &desc->vendor, 0);
+    rv = osd_hostmod_reg_read(ctx, &desc->vendor, di_addr,
+                              OSD_REG_BASE_MOD_VENDOR, 16, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
-    rv = osd_hostmod_reg_read(ctx, di_addr, OSD_REG_BASE_MOD_TYPE, 16,
-                              &desc->type, 0);
+    rv = osd_hostmod_reg_read(ctx, &desc->type, di_addr, OSD_REG_BASE_MOD_TYPE,
+                              16, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
-    rv = osd_hostmod_reg_read(ctx, di_addr, OSD_REG_BASE_MOD_VERSION, 16,
-                              &desc->version, 0);
+    rv = osd_hostmod_reg_read(ctx, &desc->version, di_addr,
+                              OSD_REG_BASE_MOD_VERSION, 16, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }

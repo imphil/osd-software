@@ -9,10 +9,25 @@
  * Log handler for OSD
  */
 void osd_log_handler(struct osd_log_ctx *ctx, int priority,
-                            const char *file, int line, const char *fn,
-                            const char *format, va_list args)
+                     const char *file, int line, const char *fn,
+                     const char *format, va_list args)
 {
-    vfprintf(stderr, format, args);
+    FILE* fd = stderr;
+
+    switch (priority) {
+    case LOG_ERR:
+        fprintf(fd, "ERROR");
+        break;
+    case LOG_WARNING:
+        fprintf(fd, "WARNING");
+        break;
+    case LOG_DEBUG:
+        fprintf(fd, "DEBUG");
+        break;
+    }
+    fprintf(fd, " %s:%d %s ", file, line, fn);
+    vfprintf(fd, format, args);
+    fprintf(fd, "\n");
 }
 
 /**

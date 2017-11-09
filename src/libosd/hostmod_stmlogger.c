@@ -106,15 +106,15 @@ osd_result osd_hostmod_stmlogger_tracestart(struct osd_hostmod_stmlogger_ctx *ct
     }
 
     uint16_t event_dest = osd_hostmod_get_diaddr(ctx->hostmod_ctx);
-    rv = osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
-                               OSD_REG_BASE_MOD_EVENT_DEST, 16, &event_dest, 0);
+    rv = osd_hostmod_reg_write(ctx->hostmod_ctx, &event_dest, ctx->stm_di_addr,
+                               OSD_REG_BASE_MOD_EVENT_DEST, 16, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
 
     uint16_t cs = OSD_REG_BASE_MOD_CS_ACTIVE;
-    rv = osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
-                               OSD_REG_BASE_MOD_CS, 16, &cs, 0);
+    rv = osd_hostmod_reg_write(ctx->hostmod_ctx, &cs, ctx->stm_di_addr,
+                               OSD_REG_BASE_MOD_CS, 16, 0);
     if (OSD_FAILED(rv)) {
         return rv;
     }
@@ -126,8 +126,8 @@ API_EXPORT
 osd_result osd_hostmod_stmlogger_tracestop(struct osd_hostmod_stmlogger_ctx *ctx)
 {
     uint16_t cs = 0;
-    osd_hostmod_reg_write(ctx->hostmod_ctx, ctx->stm_di_addr,
-                          OSD_REG_BASE_MOD_CS, 16, &cs, 0);
+    osd_hostmod_reg_write(ctx->hostmod_ctx, &cs, ctx->stm_di_addr,
+                          OSD_REG_BASE_MOD_CS, 16, 0);
 
     return OSD_OK;
 }
