@@ -1,1 +1,3 @@
-SUBDIRS = libosd tools
+SUBDIRS = libosd
+ 
+#SUBDIRS += tools

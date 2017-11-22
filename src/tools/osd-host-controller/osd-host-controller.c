@@ -8,6 +8,7 @@
 #include "../cli-util.h"
 #include <czmq.h>
 #include <osd/packet.h>
+#include "inprochelper.h"
 
 zsock_t *server_socket;
 
@@ -228,8 +229,24 @@ osd_result setup(void)
     return OSD_OK;
 }
 
+static void router_init()
+{
+
+}
+
+static osd_result inproc_cmd_handler(struct inprochelper_thread_ctx* thread_ctx,
+                                     const char* type_str, zmsg_t *inproc_msg)
+{
+    return OSD_OK;
+}
+
 int run(void)
 {
+    struct inprochelper_ctx *inprochelper_ctx;
+    inprochelper_new(&inprochelper_ctx, log_ctx, NULL, NULL,
+                     inproc_cmd_handler, NULL);
+
+
     zsys_init();
 
     server_socket = zsock_new_router("tcp://0.0.0.0:9990");

@@ -133,4 +133,10 @@ static inline void timespec_add_ns(struct timespec *a, uint64_t ns)
 
 //#define BIT_MASK(x)           (1UL << ((x) % BITS_PER_LONG))
 
+/**
+ * Timeout (in ms) when receiving data from a ZeroMQ socket. This can be either
+ * data from the host controller, or data from the I/O thread.
+ */
+#define ZMQ_RCV_TIMEOUT (1*1000) // 1 s
+
 #endif // OSD_OSD_PRIVATE_H

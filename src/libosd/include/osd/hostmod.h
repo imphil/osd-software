@@ -58,16 +58,27 @@ extern "C" {
 struct osd_hostmod_ctx;
 
 /**
+ * Event handler function prototype
+ *
+ * The ownership of packet is passed to the handler function.
+ */
+typedef osd_result (*osd_hostmod_event_handler_fn)(void */* arg */, struct osd_packet * /* packet */);
+
+/**
  * Create new osd_hostmod instance
  *
  * @param[out] ctx the osd_hostmod_ctx context to be created
  * @param[in] log_ctx the log context to be used. Set to NULL to disable logging
+ * @param[in] host_controller_address ZeroMQ endpoint of the host controller
  * @return OSD_OK on success, any other value indicates an error
  *
  * @see osd_hostmod_free()
  */
 osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
-                           struct osd_log_ctx *log_ctx);
+                           struct osd_log_ctx *log_ctx,
+                           const char *host_controller_address,
+                           osd_hostmod_event_handler_fn event_handler,
+                           void* event_handler_arg);
 
 /**
  * Free and NULL a communication API context object
@@ -90,8 +101,7 @@ osd_result osd_hostmod_get_modules(struct osd_hostmod_ctx *ctx,
  *
  * @see osd_hostmod_disconnect()
  */
-osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx,
-                               const char* host_controller_address);
+osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx);
 
 /**
  * Shut down all communication with the device
@@ -181,28 +191,6 @@ uint16_t osd_hostmod_get_diaddr(struct osd_hostmod_ctx *ctx);
 osd_result osd_hostmod_describe_module(struct osd_hostmod_ctx *ctx,
                                        uint16_t di_addr,
                                        struct osd_module_desc *desc);
-
-/**
- * Event handler function prototype
- *
- * The ownership of packet is passed to the handler function.
- */
-typedef osd_result (*osd_hostmod_event_handler_fn)(void */* arg */, struct osd_packet * /* packet */);
-
-/**
- * Register a handler for received DI packets of type EVENT
- *
- * An event handler must be set before calling osd_hostmod_connect(). It is
- * called whenever a new packet of type EVENT is received.
- *
- * @param ctx the context object
- * @param event_handler the event handler function to register
- * @param arg an arbitrary argument passed to the event handler when it is
- *            called. Set to NULL if unused.
- */
-osd_result osd_hostmod_register_event_handler(struct osd_hostmod_ctx *ctx,
-                                              osd_hostmod_event_handler_fn event_handler,
-                                              void *arg);
 
 /**@}*/ /* end of doxygen group libosd-hostmod */
 

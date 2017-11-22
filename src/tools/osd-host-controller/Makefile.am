@@ -8,6 +8,7 @@ AM_LDFLAGS += \
 AM_CFLAGS += \
 	-I$(top_srcdir)/src/libosd/include \
 	-include $(top_builddir)/config.h \
+	-I$(srcdir)/../common \
 	${libczmq_CFLAGS}
 
 osd_host_controller_SOURCES = \

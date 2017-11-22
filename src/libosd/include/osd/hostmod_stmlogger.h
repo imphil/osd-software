@@ -48,8 +48,9 @@ struct osd_hostmod_stmlogger_ctx;
 
 osd_result osd_hostmod_stmlogger_new(struct osd_hostmod_stmlogger_ctx **ctx,
                                      struct osd_log_ctx *log_ctx,
+                                     const char* host_controller_address,
                                      unsigned int stm_di_addr);
-osd_result osd_hostmod_stmlogger_connect(struct osd_hostmod_stmlogger_ctx *ctx, const char* host_controller_address);
+osd_result osd_hostmod_stmlogger_connect(struct osd_hostmod_stmlogger_ctx *ctx);
 osd_result osd_hostmod_stmlogger_disconnect(struct osd_hostmod_stmlogger_ctx *ctx);
 void osd_hostmod_stmlogger_free(struct osd_hostmod_stmlogger_ctx **ctx_p);
 

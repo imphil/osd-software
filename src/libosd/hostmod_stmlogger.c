@@ -45,10 +45,21 @@ struct osd_hostmod_stmlogger_ctx {
     unsigned int stm_di_addr;
 };
 
+static osd_result handle_event_pkg(void* arg, struct osd_packet *pkg)
+{
+    osd_packet_dump(pkg, stdout);
+    fflush(stdout);
+
+    osd_packet_free(&pkg);
+
+    return OSD_OK;
+}
+
 
 API_EXPORT
 osd_result osd_hostmod_stmlogger_new(struct osd_hostmod_stmlogger_ctx **ctx,
                                      struct osd_log_ctx *log_ctx,
+                                     const char* host_controller_address,
                                      unsigned int stm_di_addr)
 {
     osd_result rv;
@@ -60,7 +71,8 @@ osd_result osd_hostmod_stmlogger_new(struct osd_hostmod_stmlogger_ctx **ctx,
     c->stm_di_addr = stm_di_addr;
 
     struct osd_hostmod_ctx *hostmod_ctx;
-    rv = osd_hostmod_new(&hostmod_ctx, log_ctx);
+    rv = osd_hostmod_new(&hostmod_ctx, log_ctx, host_controller_address,
+                         handle_event_pkg, c);
     assert(OSD_SUCCEEDED(rv));
     c->hostmod_ctx = hostmod_ctx;
 
@@ -132,26 +144,10 @@ osd_result osd_hostmod_stmlogger_tracestop(struct osd_hostmod_stmlogger_ctx *ctx
     return OSD_OK;
 }
 
-static osd_result handle_event_pkg(void* arg, struct osd_packet *pkg)
-{
-    osd_packet_dump(pkg, stdout);
-    fflush(stdout);
-
-    osd_packet_free(&pkg);
-
-    return OSD_OK;
-}
-
 API_EXPORT
-osd_result osd_hostmod_stmlogger_connect(struct osd_hostmod_stmlogger_ctx *ctx,
-                                         const char* host_controller_address)
+osd_result osd_hostmod_stmlogger_connect(struct osd_hostmod_stmlogger_ctx *ctx)
 {
-    osd_result rv;
-
-    rv = osd_hostmod_register_event_handler(ctx->hostmod_ctx, handle_event_pkg, NULL);
-    assert(OSD_SUCCEEDED(rv));
-
-    return osd_hostmod_connect(ctx->hostmod_ctx, host_controller_address);
+    return osd_hostmod_connect(ctx->hostmod_ctx);
 }
 
 API_EXPORT

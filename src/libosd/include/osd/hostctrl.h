@@ -46,7 +46,8 @@ extern "C" {
 struct osd_hostctrl_ctx;
 
 osd_result osd_hostctrl_new(struct osd_hostctrl_ctx **ctx,
-                            struct osd_log_ctx *log_ctx);
+                            struct osd_log_ctx *log_ctx,
+                            const char* router_address);
 osd_result osd_hostctrl_start(struct osd_hostctrl_ctx *ctx,
                               const char* host_controller_address);
 osd_result osd_hostctrl_stop(struct osd_hostctrl_ctx *ctx);

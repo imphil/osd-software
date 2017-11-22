@@ -61,10 +61,12 @@ int run(void)
     assert(OSD_SUCCEEDED(osd_rv));
 
     struct osd_hostmod_stmlogger_ctx *hostmod_stmlogger_ctx;
-    osd_rv = osd_hostmod_stmlogger_new(&hostmod_stmlogger_ctx, osd_log_ctx, a_stm_diaddr->ival[0]);
+    osd_rv = osd_hostmod_stmlogger_new(&hostmod_stmlogger_ctx, osd_log_ctx,
+                                       a_hostctrl_ep->sval[0],
+                                       a_stm_diaddr->ival[0]);
     assert(OSD_SUCCEEDED(osd_rv));
 
-    osd_rv = osd_hostmod_stmlogger_connect(hostmod_stmlogger_ctx, a_hostctrl_ep->sval[0]);
+    osd_rv = osd_hostmod_stmlogger_connect(hostmod_stmlogger_ctx);
     if (OSD_FAILED(osd_rv)) {
         fatal("Unable to connect to host controller at %s (rv=%d).\n",
               a_hostctrl_ep->sval[0], osd_rv);
