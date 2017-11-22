@@ -56,7 +56,10 @@ struct osd_hostmod_ctx {
     struct worker_ctx *ioworker_ctx;
 };
 
-struct thread_ctx_usr {
+/**
+ * I/O thread user context
+ */
+struct iothread_usr_ctx {
     /** Control communication socket with the host controller */
     zsock_t *ctrl_socket;
 
@@ -71,87 +74,17 @@ struct thread_ctx_usr {
 };
 
 /**
- * Send a DI Packet to the host controller
- *
- * The actual sending is done through the I/O worker.
- */
-static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
-                                          struct osd_packet *packet)
-{
-    int rv;
-    zmsg_t *msg = zmsg_new();
-    assert(msg);
-
-    rv = zmsg_addstr(msg, "D");
-    assert(rv == 0);
-    rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
-    assert(rv == 0);
-
-    rv = zmsg_send(&msg, ctx->ioworker_ctx->inproc_socket);
-    if (rv != 0) {
-        return OSD_ERROR_COM;
-    }
-
-    return OSD_OK;
-}
-
-/**
- * Receive a DI Packet (on the main thread)
- *
- * @return OSD_OK if the operation was successful,
- *         OSD_ERROR_TIMEDOUT if the operation timed out.
- *         Any other value indicates an error
- */
-static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
-                                             struct osd_packet **packet)
-{
-    osd_result osd_rv;
-
-    errno = 0;
-    printf("osd_hostmod_receive_packet(): waiting here\n");
-    zmsg_t* msg = zmsg_recv(ctx->ioworker_ctx->inproc_socket);
-    printf("osd_hostmod_receive_packet(): done waiting\n");
-    if (!msg && errno == EAGAIN) {
-        printf("osd_hostmod_receive_packet(): got timeout\n");
-        return OSD_ERROR_TIMEDOUT;
-    }
-    assert(msg);
-
-    // ensure that the message we got from the I/O thread is packet data
-    // XXX: possibly extend to hand off non-packet messages to their appropriate
-    // handler
-    zframe_t *type_frame = zmsg_pop(msg);
-    assert(type_frame);
-    assert(zframe_streq(type_frame, "D"));
-    zframe_destroy(&type_frame);
-
-    // get osd_packet from frame data
-    zframe_t *data_frame = zmsg_pop(msg);
-    fprintf(stderr, "supertest: %s\n", zframe_strhex(data_frame));
-    assert(data_frame);
-    struct osd_packet *p;
-    osd_rv = osd_packet_new_from_zframe(&p, data_frame);
-    assert(OSD_SUCCEEDED(osd_rv));
-
-    zframe_destroy(&data_frame);
-    zmsg_destroy(&msg);
-
-    *packet = p;
-
-    return OSD_OK;
-}
-
-/**
  * Process incoming messages from the host controller
  *
  * @return 0 if the message was processed, -1 if @p loop should be terminated
  */
-static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *thread_ctx_void)
+static int iothread_rcv_from_hostctrl(zloop_t *loop, zsock_t *reader,
+                                      void *thread_ctx_void)
 {
     struct worker_thread_ctx* thread_ctx = (struct worker_thread_ctx*)thread_ctx_void;
     assert(thread_ctx);
 
-    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    struct iothread_usr_ctx *usrctx = thread_ctx->usr;
     assert(usrctx);
 
     int rv;
@@ -167,10 +100,6 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *thread_ctx_void
     if (zframe_streq(type_frame, "D")) {
         zframe_t *data_frame = zmsg_next(msg);
         assert(data_frame);
-
-        printf("HERE\n");
-        zframe_print(data_frame, "PREFIX");
-        fprintf(stderr, "supertest: %s\n", zframe_strhex(data_frame));
 
         struct osd_packet *pkg;
         osd_rv = osd_packet_new_from_zframe(&pkg, data_frame);
@@ -207,12 +136,12 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *thread_ctx_void
 /**
  * Obtain a DI address for this host debug module from the host controller
  */
-static osd_result obtain_diaddr(struct worker_thread_ctx *thread_ctx,
-                                uint16_t *di_addr)
+static osd_result iothread_obtain_diaddr(struct worker_thread_ctx *thread_ctx,
+                                         uint16_t *di_addr)
 {
     int rv;
 
-    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    struct iothread_usr_ctx *usrctx = thread_ctx->usr;
     assert(usrctx);
     zsock_t *sock = usrctx->ctrl_socket;
 
@@ -270,9 +199,9 @@ static osd_result obtain_diaddr(struct worker_thread_ctx *thread_ctx,
  * or the DI address assigned to the host module if the connection was
  * successfully established.
  */
-static void connect_to_hostctrl(struct worker_thread_ctx *thread_ctx)
+static void iothread_connect_to_hostctrl(struct worker_thread_ctx *thread_ctx)
 {
-    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    struct iothread_usr_ctx *usrctx = thread_ctx->usr;
     assert(usrctx);
 
     osd_result retval;
@@ -290,7 +219,7 @@ static void connect_to_hostctrl(struct worker_thread_ctx *thread_ctx)
 
     // Get our DI address
     uint16_t di_addr;
-    osd_rv = obtain_diaddr(thread_ctx, &di_addr);
+    osd_rv = iothread_obtain_diaddr(thread_ctx, &di_addr);
     if (OSD_FAILED(osd_rv)) {
         retval = -1;
         goto free_return;
@@ -300,7 +229,7 @@ static void connect_to_hostctrl(struct worker_thread_ctx *thread_ctx)
     // register handler for messages coming from the host controller
     int zmq_rv;
     zmq_rv = zloop_reader(thread_ctx->zloop, usrctx->ctrl_socket,
-                          ctrl_io_ext_rcv, thread_ctx);
+                          iothread_rcv_from_hostctrl, thread_ctx);
     assert(zmq_rv == 0);
     zloop_reader_set_tolerant(thread_ctx->zloop, usrctx->ctrl_socket);
 
@@ -319,9 +248,9 @@ free_return:
  * I/O thread. After the disconnect is done a I-DISCONNECT-DONE message is sent
  * to the main thread.
  */
-static void disconnect_from_hostctrl(struct worker_thread_ctx *thread_ctx)
+static void iothread_disconnect_from_hostctrl(struct worker_thread_ctx *thread_ctx)
 {
-    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    struct iothread_usr_ctx *usrctx = thread_ctx->usr;
     assert(usrctx);
 
     osd_result retval;
@@ -338,16 +267,16 @@ static void disconnect_from_hostctrl(struct worker_thread_ctx *thread_ctx)
 static osd_result iothread_handle_inproc_request(struct worker_thread_ctx *thread_ctx,
                                                  const char *name, zmsg_t *msg)
 {
-    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    struct iothread_usr_ctx *usrctx = thread_ctx->usr;
     assert(usrctx);
 
     int rv;
 
     if (!strcmp(name, "I-CONNECT")) {
-        connect_to_hostctrl(thread_ctx);
+        iothread_connect_to_hostctrl(thread_ctx);
 
     } else if (!strcmp(name, "I-DISCONNECT")) {
-        disconnect_from_hostctrl(thread_ctx);
+        iothread_disconnect_from_hostctrl(thread_ctx);
 
     } else if (!strcmp(name, "D")) {
         // Forward data packet to the host controller
@@ -366,12 +295,79 @@ static osd_result iothread_handle_inproc_request(struct worker_thread_ctx *threa
 static osd_result iothread_destroy(struct worker_thread_ctx *thread_ctx)
 {
     assert(thread_ctx);
-    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    struct iothread_usr_ctx *usrctx = thread_ctx->usr;
     assert(usrctx);
 
     free(usrctx->host_controller_address);
     free(usrctx);
     thread_ctx->usr = NULL;
+
+    return OSD_OK;
+}
+
+/**
+ * Send a DI Packet to the host controller
+ *
+ * The actual sending is done through the I/O worker.
+ */
+static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
+                                          struct osd_packet *packet)
+{
+    int rv;
+    zmsg_t *msg = zmsg_new();
+    assert(msg);
+
+    rv = zmsg_addstr(msg, "D");
+    assert(rv == 0);
+    rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
+    assert(rv == 0);
+
+    rv = zmsg_send(&msg, ctx->ioworker_ctx->inproc_socket);
+    if (rv != 0) {
+        return OSD_ERROR_COM;
+    }
+
+    return OSD_OK;
+}
+
+/**
+ * Receive a DI Packet
+ *
+ * @return OSD_OK if the operation was successful,
+ *         OSD_ERROR_TIMEDOUT if the operation timed out.
+ *         Any other value indicates an error
+ */
+static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
+                                             struct osd_packet **packet)
+{
+    osd_result osd_rv;
+
+    errno = 0;
+    zmsg_t* msg = zmsg_recv(ctx->ioworker_ctx->inproc_socket);
+    if (!msg && errno == EAGAIN) {
+        return OSD_ERROR_TIMEDOUT;
+    }
+    assert(msg);
+
+    // ensure that the message we got from the I/O thread is packet data
+    // XXX: possibly extend to hand off non-packet messages to their appropriate
+    // handler
+    zframe_t *type_frame = zmsg_pop(msg);
+    assert(type_frame);
+    assert(zframe_streq(type_frame, "D"));
+    zframe_destroy(&type_frame);
+
+    // get osd_packet from frame data
+    zframe_t *data_frame = zmsg_pop(msg);
+    assert(data_frame);
+    struct osd_packet *p;
+    osd_rv = osd_packet_new_from_zframe(&p, data_frame);
+    assert(OSD_SUCCEEDED(osd_rv));
+
+    zframe_destroy(&data_frame);
+    zmsg_destroy(&msg);
+
+    *packet = p;
 
     return OSD_OK;
 }
@@ -392,7 +388,7 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     c->is_connected = false;
 
     // prepare custom data passed to I/O thread
-    struct thread_ctx_usr *iothread_usr_data = calloc(1, sizeof(struct thread_ctx_usr));
+    struct iothread_usr_ctx *iothread_usr_data = calloc(1, sizeof(struct iothread_usr_ctx));
     assert(iothread_usr_data);
 
     iothread_usr_data->event_handler = event_handler;
