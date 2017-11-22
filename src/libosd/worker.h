@@ -15,8 +15,7 @@
 /**
  * Worker context object (to be used on main thread)
  */
-struct worker_ctx
-{
+struct worker_ctx {
     /** Worker thread */
     pthread_t thread;
 
@@ -48,8 +47,7 @@ typedef osd_result (*worker_cmd_handler_fn)(
 /**
  * Worker context object (to be used in the worker thread)
  */
-struct worker_thread_ctx
-{
+struct worker_thread_ctx {
     /** Event processing zloop */
     zloop_t* zloop;
 

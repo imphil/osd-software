@@ -24,15 +24,13 @@
  *   Philipp Wagner <philipp.wagner@tum.de>
  */
 
-
-
-#include "worker.h"
-
 #include <osd/osd.h>
 #include <osd/hostmod.h>
 #include <osd/packet.h>
 #include <osd/reg.h>
+
 #include "osd-private.h"
+#include "worker.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -458,11 +456,10 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
         return OSD_ERROR_NOT_CONNECTED;
     }
 
-    worker_send_status(ctx->ioworker_ctx->inproc_socket,
-                             "I-DISCONNECT", 0);
+    worker_send_status(ctx->ioworker_ctx->inproc_socket, "I-DISCONNECT", 0);
     osd_result retval;
     rv = worker_wait_for_status(ctx->ioworker_ctx->inproc_socket,
-                                      "I-DISCONNECT-DONE", &retval);
+                                "I-DISCONNECT-DONE", &retval);
     if (OSD_FAILED(rv)) {
         return rv;
     }

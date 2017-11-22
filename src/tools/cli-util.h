@@ -105,6 +105,8 @@ static void cli_vlog(int priority, const char* category,
     vfprintf(stderr, format, args);
 
     if (cfg.color_output) fprintf(stderr, ANSI_COLOR_RESET);
+
+    fprintf(stderr, "\n");
 }
 
 /**

@@ -4,7 +4,8 @@ pkginclude_HEADERS =\
 	include/osd/packet.h \
 	include/osd/module.h \
 	include/osd/hostmod.h \
-	include/osd/hostmod_stmlogger.h
+	include/osd/hostmod_stmlogger.h \
+	include/osd/hostctrl.h
 
 lib_LTLIBRARIES = libosd.la
 
@@ -14,6 +15,7 @@ libosd_la_SOURCES =\
 	packet.c \
 	hostmod.c \
 	hostmod_stmlogger.c \
+	hostctrl.c \
 	worker.c \
 	util.c
 
