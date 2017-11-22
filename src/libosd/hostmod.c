@@ -26,7 +26,7 @@
 
 
 
-#include "inprochelper.h"
+#include "worker.h"
 
 #include <osd/osd.h>
 #include <osd/hostmod.h>
@@ -52,8 +52,8 @@ struct osd_hostmod_ctx {
     /** Address assigned to this module in the debug interconnect */
     uint16_t diaddr;
 
-    /** In-process communication helper */
-    struct inprochelper_ctx *inprochelper_ctx;
+    /** I/O worker */
+    struct worker_ctx *ioworker_ctx;
 };
 
 struct thread_ctx_usr {
@@ -71,7 +71,9 @@ struct thread_ctx_usr {
 };
 
 /**
- * Send a DI Packet
+ * Send a DI Packet to the host controller
+ *
+ * The actual sending is done through the I/O worker.
  */
 static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
                                           struct osd_packet *packet)
@@ -85,7 +87,7 @@ static osd_result osd_hostmod_send_packet(struct osd_hostmod_ctx *ctx,
     rv = zmsg_addmem(msg, packet->data_raw, osd_packet_sizeof(packet));
     assert(rv == 0);
 
-    rv = zmsg_send(&msg, ctx->inprochelper_ctx->inproc_socket);
+    rv = zmsg_send(&msg, ctx->ioworker_ctx->inproc_socket);
     if (rv != 0) {
         return OSD_ERROR_COM;
     }
@@ -107,7 +109,7 @@ static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
 
     errno = 0;
     printf("osd_hostmod_receive_packet(): waiting here\n");
-    zmsg_t* msg = zmsg_recv(ctx->inprochelper_ctx->inproc_socket);
+    zmsg_t* msg = zmsg_recv(ctx->ioworker_ctx->inproc_socket);
     printf("osd_hostmod_receive_packet(): done waiting\n");
     if (!msg && errno == EAGAIN) {
         printf("osd_hostmod_receive_packet(): got timeout\n");
@@ -146,7 +148,7 @@ static osd_result osd_hostmod_receive_packet(struct osd_hostmod_ctx *ctx,
  */
 static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *thread_ctx_void)
 {
-    struct inprochelper_thread_ctx* thread_ctx = (struct inprochelper_thread_ctx*)thread_ctx_void;
+    struct worker_thread_ctx* thread_ctx = (struct worker_thread_ctx*)thread_ctx_void;
     assert(thread_ctx);
 
     struct thread_ctx_usr *usrctx = thread_ctx->usr;
@@ -205,7 +207,7 @@ static int ctrl_io_ext_rcv(zloop_t *loop, zsock_t *reader, void *thread_ctx_void
 /**
  * Obtain a DI address for this host debug module from the host controller
  */
-static osd_result obtain_diaddr(struct inprochelper_thread_ctx *thread_ctx,
+static osd_result obtain_diaddr(struct worker_thread_ctx *thread_ctx,
                                 uint16_t *di_addr)
 {
     int rv;
@@ -268,7 +270,7 @@ static osd_result obtain_diaddr(struct inprochelper_thread_ctx *thread_ctx,
  * or the DI address assigned to the host module if the connection was
  * successfully established.
  */
-static void connect_to_hostctrl(struct inprochelper_thread_ctx *thread_ctx)
+static void connect_to_hostctrl(struct worker_thread_ctx *thread_ctx)
 {
     struct thread_ctx_usr *usrctx = thread_ctx->usr;
     assert(usrctx);
@@ -306,7 +308,7 @@ free_return:
     if (retval == -1) {
         zsock_destroy(&usrctx->ctrl_socket);
     }
-    inprochelper_send_status(thread_ctx->inproc_socket, "I-CONNECT-DONE",
+    worker_send_status(thread_ctx->inproc_socket, "I-CONNECT-DONE",
                              retval);
 }
 
@@ -317,7 +319,7 @@ free_return:
  * I/O thread. After the disconnect is done a I-DISCONNECT-DONE message is sent
  * to the main thread.
  */
-static void disconnect_from_hostctrl(struct inprochelper_thread_ctx *thread_ctx)
+static void disconnect_from_hostctrl(struct worker_thread_ctx *thread_ctx)
 {
     struct thread_ctx_usr *usrctx = thread_ctx->usr;
     assert(usrctx);
@@ -329,11 +331,11 @@ static void disconnect_from_hostctrl(struct inprochelper_thread_ctx *thread_ctx)
 
     retval = OSD_OK;
 
-    inprochelper_send_status(thread_ctx->inproc_socket, "I-DISCONNECT-DONE",
+    worker_send_status(thread_ctx->inproc_socket, "I-DISCONNECT-DONE",
                              retval);
 }
 
-static osd_result iothread_handle_inproc_request(struct inprochelper_thread_ctx *thread_ctx,
+static osd_result iothread_handle_inproc_request(struct worker_thread_ctx *thread_ctx,
                                                  const char *name, zmsg_t *msg)
 {
     struct thread_ctx_usr *usrctx = thread_ctx->usr;
@@ -361,7 +363,7 @@ static osd_result iothread_handle_inproc_request(struct inprochelper_thread_ctx 
     return OSD_OK;
 }
 
-static osd_result iothread_destroy(struct inprochelper_thread_ctx *thread_ctx)
+static osd_result iothread_destroy(struct worker_thread_ctx *thread_ctx)
 {
     assert(thread_ctx);
     struct thread_ctx_usr *usrctx = thread_ctx->usr;
@@ -397,7 +399,7 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     iothread_usr_data->event_handler_arg = event_handler_arg;
     iothread_usr_data->host_controller_address = strdup(host_controller_address);
 
-    rv = inprochelper_new(&c->inprochelper_ctx, log_ctx, NULL, iothread_destroy,
+    rv = worker_new(&c->ioworker_ctx, log_ctx, NULL, iothread_destroy,
                           iothread_handle_inproc_request, iothread_usr_data);
     if (OSD_FAILED(rv)) {
         return rv;
@@ -424,10 +426,10 @@ osd_result osd_hostmod_connect(struct osd_hostmod_ctx *ctx)
     assert(ctx);
     assert(!ctx->is_connected);
 
-    inprochelper_send_status(ctx->inprochelper_ctx->inproc_socket, "I-CONNECT",
+    worker_send_status(ctx->ioworker_ctx->inproc_socket, "I-CONNECT",
                              0);
     int retval;
-    rv = inprochelper_wait_for_status(ctx->inprochelper_ctx->inproc_socket,
+    rv = worker_wait_for_status(ctx->ioworker_ctx->inproc_socket,
                                       "I-CONNECT-DONE", &retval);
     if (OSD_FAILED(rv) || retval == -1) {
         err(ctx->log_ctx, "Unable to establish connection to host controller.");
@@ -460,10 +462,10 @@ osd_result osd_hostmod_disconnect(struct osd_hostmod_ctx *ctx)
         return OSD_ERROR_NOT_CONNECTED;
     }
 
-    inprochelper_send_status(ctx->inprochelper_ctx->inproc_socket,
+    worker_send_status(ctx->ioworker_ctx->inproc_socket,
                              "I-DISCONNECT", 0);
     osd_result retval;
-    rv = inprochelper_wait_for_status(ctx->inprochelper_ctx->inproc_socket,
+    rv = worker_wait_for_status(ctx->ioworker_ctx->inproc_socket,
                                       "I-DISCONNECT-DONE", &retval);
     if (OSD_FAILED(rv)) {
         return rv;
@@ -488,7 +490,7 @@ void osd_hostmod_free(struct osd_hostmod_ctx **ctx_p)
 
     assert(!ctx->is_connected);
 
-    inprochelper_free(&ctx->inprochelper_ctx);
+    worker_free(&ctx->ioworker_ctx);
 
     free(ctx);
     *ctx_p = NULL;

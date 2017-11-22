@@ -14,7 +14,7 @@ libosd_la_SOURCES =\
 	packet.c \
 	hostmod.c \
 	hostmod_stmlogger.c \
-	inprochelper.c \
+	worker.c \
 	util.c
 
 libosd_la_LDFLAGS = \
