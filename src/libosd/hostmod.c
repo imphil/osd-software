@@ -361,6 +361,19 @@ static osd_result iothread_handle_inproc_request(struct inprochelper_thread_ctx 
     return OSD_OK;
 }
 
+static osd_result iothread_destroy(struct inprochelper_thread_ctx *thread_ctx)
+{
+    assert(thread_ctx);
+    struct thread_ctx_usr *usrctx = thread_ctx->usr;
+    assert(usrctx);
+
+    free(usrctx->host_controller_address);
+    free(usrctx);
+    thread_ctx->usr = NULL;
+
+    return OSD_OK;
+}
+
 API_EXPORT
 osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
                            struct osd_log_ctx *log_ctx,
@@ -384,7 +397,7 @@ osd_result osd_hostmod_new(struct osd_hostmod_ctx **ctx,
     iothread_usr_data->event_handler_arg = event_handler_arg;
     iothread_usr_data->host_controller_address = strdup(host_controller_address);
 
-    rv = inprochelper_new(&c->inprochelper_ctx, log_ctx, NULL, NULL,
+    rv = inprochelper_new(&c->inprochelper_ctx, log_ctx, NULL, iothread_destroy,
                           iothread_handle_inproc_request, iothread_usr_data);
     if (OSD_FAILED(rv)) {
         return rv;

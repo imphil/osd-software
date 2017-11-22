@@ -15,11 +15,6 @@ void inprochelper_send_data(zsock_t *socket, const char* name, const void* data,
 
     assert(socket);
 
-#ifdef DEBUG_INPROCHELPER
-    fprintf(stderr, "INPROCHELPER: inprochelper_send_data(socket=%p, name=%s, "
-            "size=%zu)\n", socket, name, size);
-#endif
-
     zmsg_t *msg = zmsg_new();
     assert(msg);
     zmq_rv = zmsg_addstr(msg, name);
@@ -40,20 +35,19 @@ void inprochelper_send_status(zsock_t *socket, const char* name, int value)
 osd_result inprochelper_wait_for_status(zsock_t *socket, const char* name,
                                         int *retvalue)
 {
-#ifdef DEBUG_INPROCHELPER
-    fprintf(stderr, "INPROCHELPER: inprochelper_wait_for_status(socket=%p, name=%s)\n", socket, name);
-#endif
-
     zmsg_t *msg = zmsg_recv(socket);
     if (!msg) {
-        fprintf(stderr, "INPROCHELPER: inprochelper_wait_for_status(): ERROR 1\n", *retvalue);
-        return OSD_ERROR_FAILURE;
+        if (errno == EAGAIN) {
+            return OSD_ERROR_TIMEDOUT;
+        } else {
+            return OSD_ERROR_FAILURE;
+        }
     }
+
     zframe_t *name_frame = zmsg_pop(msg);
     if (!zframe_streq(name_frame, name)) {
         zframe_destroy(&name_frame);
         zmsg_destroy(&msg);
-        fprintf(stderr, "INPROCHELPER: inprochelper_wait_for_status(): ERROR 2\n", *retvalue);
         return OSD_ERROR_FAILURE;
     }
     zframe_destroy(&name_frame);
@@ -64,10 +58,6 @@ osd_result inprochelper_wait_for_status(zsock_t *socket, const char* name,
     zframe_destroy(&data_frame);
 
     zmsg_destroy(&msg);
-
-#ifdef DEBUG_INPROCHELPER
-    fprintf(stderr, "INPROCHELPER: inprochelper_wait_for_status(): retval = %d\n", *retvalue);
-#endif
 
     return OSD_OK;
 }
@@ -117,7 +107,7 @@ free_return:
 }
 
 /**
- * I/O Thread for all control traffic
+ * Worker thread
  *
  * This thread handles all control communication with the host controller.
  * Inside the host module communicate with this thread using threadcom_*
@@ -181,6 +171,10 @@ static void* thread_main(void *thread_ctx_void)
     inprochelper_send_status(thread_ctx->inproc_socket, "I-SHUTDOWN-DONE",
                              OSD_OK);
 
+    assert(thread_ctx->usr == NULL &&
+           "You need to free() and NULL the user context in a thread function "
+           "to prevent memory leaks.");
+
     zsock_destroy(&thread_ctx->inproc_socket);
 
     zloop_destroy(&thread_ctx->zloop);
@@ -215,7 +209,7 @@ osd_result inprochelper_new(struct inprochelper_ctx **ctx,
     // the I/O thread must be able to recognize this by the timeout, and then
     // inform the main thread. If both threads follow the same timeout, the
     // I/O thread cannot inform the main thread of timeouts.
-    zsock_set_rcvtimeo(c->inproc_socket, 2 * ZMQ_RCV_TIMEOUT);
+    zsock_set_rcvtimeo(c->inproc_socket, 1.5 * ZMQ_RCV_TIMEOUT);
 
     struct inprochelper_thread_ctx *thread_ctx = calloc(1, sizeof(struct inprochelper_thread_ctx));
     assert(thread_ctx);
